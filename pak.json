@@ -1,6 +1,6 @@
 {
   "name": "TrimPod(RUS)",
-  "version": "v1.0.7-rus-0.4",
+  "version": "v1.0.7-rus-0.5",
   "type": "TOOL",
   "description": "A Russian-language fork of TrimPod Classic for TrimUI Brick/Brick Pro and Anbernic RG34XXSP, with pixel-perfect output.",
   "author": "B3L4CQU4",
@@ -15,6 +15,7 @@
   ],
   "platforms": ["tg5040", "h700"],
   "changelog": {
+    "v1.0.7-rus-0.5": "Fixed accelerated audio playback and restored online synchronized-lyrics downloads on Anbernic RG34XXSP (H700).",
     "v1.0.7-rus-0.4": "Added native Anbernic RG34XXSP (H700) support with a 360x240 UI scaled exactly to 720x480, Xbox-style controls, H700 audio, CPU, charge-limit and lid handling, while retaining the independent tg5040 runtime.",
     "v1.0.7-rus-0.3": "Fixed scrolling artist or album text flashing through the synchronized lyrics overlay and refreshed the interface screenshots.",
     "v1.0.7-rus-0.2": "Added the MENU-button popup context menu, synchronized LRC lyrics with local/cache/LRCLIB lookup and scrolling, repeat enabled by default, lyric caching and track-switch fixes, and expanded third-party licensing and source materials.",

@@ -30,7 +30,7 @@
 #ifndef TRIMPOD_H700
 #define LYRICS_WGET            "./bin/wget"
 #endif
-#define LYRICS_USER_AGENT      "TrimPod(RUS)/1.0.7-rus-0.3 " \
+#define LYRICS_USER_AGENT      "TrimPod(RUS)/1.0.7-rus-0.5 " \
                                "(https://github.com/B3L4CQU4/" \
                                "c-trimui-trimpod-classic-pak-RUS)"
 
