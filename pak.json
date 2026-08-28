@@ -1,6 +1,6 @@
 {
   "name": "TrimPod(RUS)",
-  "version": "v1.0.7-rus-0.5",
+  "version": "v1.0.7-rus-0.5-beta.1",
   "type": "TOOL",
   "description": "A Russian-language fork of TrimPod Classic for TrimUI Brick/Brick Pro and Anbernic RG34XXSP, with pixel-perfect output.",
   "author": "B3L4CQU4",
