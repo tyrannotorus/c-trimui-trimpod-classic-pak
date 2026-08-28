@@ -56,7 +56,11 @@ void trimui_deep_sleep(void)
     const char *sys = getenv("SYSTEM_PATH");
     char cmd[256];
     if (!sys || !*sys)
+#ifdef TRIMPOD_H700
+        sys = "/mnt/SDCARD/.system/h700";
+#else
         sys = "/mnt/SDCARD/.system/tg5040";   /* Brick default if env is bare */
+#endif
     snprintf(cmd, sizeof cmd, "'%s/bin/suspend'", sys);
     system(cmd);
 }
@@ -112,15 +116,40 @@ unsigned int power_get_battery_capacity(void)
     return battery_level;
 }
 
-/* Trimpod: CPU frequency control (TrimUI Brick / Allwinner A133).
+/* Trimpod: platform-specific CPU frequency control.
  * Pins the policy to a single frequency via scaling_min/max_freq. This is a
  * runtime-only change -- launch.sh saves the system cpufreq state and restores
  * it when Trimpod exits, so it never affects the device permanently. */
 #define CPUFREQ_POLICY "/sys/devices/system/cpu/cpufreq/policy0"
 #define CPUFREQ_INT    "/sys/devices/system/cpu/cpufreq/interactive"
 #define CPU_FREQ_FILE  ROCKBOX_DIR "/cpu_freq.txt"
+#ifdef TRIMPOD_H700
+#define CPU_FREQ_MIN_KHZ  480000
+#define CPU_FREQ_MAX_KHZ 1512000
+static const int cpu_freqs[] = {
+    480000, 720000, 936000, 1008000, 1104000,
+    1200000, 1320000, 1416000, 1512000
+};
+#else
 #define CPU_FREQ_MIN_KHZ  408000   /* idle floor for Dynamic */
 #define CPU_FREQ_MAX_KHZ  2000000  /* A133 top step */
+static const int cpu_freqs[] = {
+    408000, 600000, 816000, 1008000, 1200000,
+    1416000, 1608000, 1800000, 2000000
+};
+#endif
+
+#define CPU_FREQ_COUNT ((int)(sizeof(cpu_freqs) / sizeof(cpu_freqs[0])))
+
+int retrohh_cpu_freq_count(void)
+{
+    return CPU_FREQ_COUNT;
+}
+
+int retrohh_cpu_freq_at(int index)
+{
+    return index >= 0 && index < CPU_FREQ_COUNT ? cpu_freqs[index] : 0;
+}
 
 /* This file is the SINGLE owner of the CPU Frequency policy (Settings -> Power
  * -> CPU): the two modes are defined here once, persisted here, and applied here
@@ -152,6 +181,20 @@ void retrohh_cpu_set_freq(int khz)
  * don't spike to 2 GHz while the visualizer/decode still ramp. */
 void retrohh_cpu_set_dynamic(void)
 {
+#ifdef TRIMPOD_H700
+    const char *sys = getenv("SYSTEM_PATH");
+    char cmd[256];
+    if (sys && *sys)
+    {
+        snprintf(cmd, sizeof cmd, "'%s/bin/governor.sh' auto", sys);
+        if (system(cmd) == 0)
+            return;
+    }
+    char gov[] = "schedutil";
+    sysfs_set_int(CPUFREQ_POLICY "/scaling_min_freq", CPU_FREQ_MIN_KHZ);
+    sysfs_set_int(CPUFREQ_POLICY "/scaling_max_freq", CPU_FREQ_MAX_KHZ);
+    sysfs_set_string(CPUFREQ_POLICY "/scaling_governor", gov);
+#else
     char gov[] = "interactive";
     sysfs_set_int(CPUFREQ_POLICY "/scaling_min_freq", CPU_FREQ_MIN_KHZ);
     sysfs_set_int(CPUFREQ_POLICY "/scaling_max_freq", CPU_FREQ_MAX_KHZ);
@@ -162,6 +205,7 @@ void retrohh_cpu_set_dynamic(void)
     sysfs_set_int(CPUFREQ_INT "/above_hispeed_delay", 20000);
     sysfs_set_int(CPUFREQ_INT "/timer_rate", 30000);
     sysfs_set_int(CPUFREQ_INT "/min_sample_time", 100000);
+#endif
 }
 
 /* Persist the menu choice; read back by retrohh_cpu_apply_saved at next startup.
@@ -230,7 +274,11 @@ int retrohh_cpu_get_freq(void)
  *
  * Every fs access is checked and the register is only ever written from a value
  * derived from a *successful* read, so any failure is a true no-op. */
+#ifdef TRIMPOD_H700
+#define BATT_REGS         "/sys/kernel/debug/regmap/5-0034/registers"
+#else
 #define BATT_REGS         "/sys/kernel/debug/regmap/6-0034/registers"
+#endif
 #define BATT_CAP_FILE     "/sys/class/power_supply/axp2202-battery/capacity"
 #define BATT_USB_FILE     "/sys/class/power_supply/axp2202-usb/online"
 #define BATT_TARGET_FILE  ROCKBOX_DIR "/charge_limit.txt"

@@ -1,8 +1,8 @@
 {
   "name": "TrimPod(RUS)",
-  "version": "v1.0.7-rus-0.3",
+  "version": "v1.0.7-rus-0.4",
   "type": "TOOL",
-  "description": "A Russian-language fork of TrimPod Classic for TrimUI Brick/Brick Pro, with pixel-perfect output.",
+  "description": "A Russian-language fork of TrimPod Classic for TrimUI Brick/Brick Pro and Anbernic RG34XXSP, with pixel-perfect output.",
   "author": "B3L4CQU4",
   "repo_url": "https://github.com/B3L4CQU4/c-trimui-trimpod-classic-pak-RUS",
   "release_filename": "TrimPod(RUS).pak.zip",
@@ -13,8 +13,9 @@
     "screenshots/context-menu.png",
     "screenshots/visualizer.png"
   ],
-  "platforms": ["tg5040"],
+  "platforms": ["tg5040", "h700"],
   "changelog": {
+    "v1.0.7-rus-0.4": "Added native Anbernic RG34XXSP (H700) support with a 360x240 UI scaled exactly to 720x480, Xbox-style controls, H700 audio, CPU, charge-limit and lid handling, while retaining the independent tg5040 runtime.",
     "v1.0.7-rus-0.3": "Fixed scrolling artist or album text flashing through the synchronized lyrics overlay and refreshed the interface screenshots.",
     "v1.0.7-rus-0.2": "Added the MENU-button popup context menu, synchronized LRC lyrics with local/cache/LRCLIB lookup and scrolling, repeat enabled by default, lyric caching and track-switch fixes, and expanded third-party licensing and source materials.",
     "v1.0.7-rus": "Russian fork of TrimPod 1.0.7 with TrimUI Brick Pro support, exact 512x384 to 1024x768 2x rendering, Russian UI, an RU/EN UTF-8 keyboard, ChicagoFLF for English, and the Mulmaru-based Russian font family.",

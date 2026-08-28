@@ -223,7 +223,15 @@ static int set_hwparams(snd_pcm_t *pcm, unsigned long sampr)
         goto error;
     }
     srate = sampr;
+#ifdef TRIMPOD_H700
+    /* sunxi-snd-codec advertises a wide range. Its "near" constraints can
+     * silently renegotiate 48 kHz to 192 kHz when period/buffer sizes are set
+     * afterwards, producing 4x playback. This exact tuple is the native H700
+     * path and is also what NextUI's ALSA device accepts. */
+    err = snd_pcm_hw_params_set_rate(pcm, params, srate, 0);
+#else
     err = snd_pcm_hw_params_set_rate_near(pcm, params, &srate, 0);
+#endif
     if (err < 0)
     {
         logf("Rate %luHz not available for playback: %s", sampr, snd_strerror(err));
@@ -240,13 +248,21 @@ static int set_hwparams(snd_pcm_t *pcm, unsigned long sampr)
         goto error;
     }
 
+#ifdef TRIMPOD_H700
+    err = snd_pcm_hw_params_set_buffer_size(pcm, params, buffer_size);
+#else
     err = snd_pcm_hw_params_set_buffer_size_near(pcm, params, &buffer_size);
+#endif
     if (err < 0)
     {
         logf("Unable to set buffer size %ld: %s", buffer_size, snd_strerror(err));
         goto error;
     }
+#ifdef TRIMPOD_H700
+    err = snd_pcm_hw_params_set_period_size(pcm, params, period_size, 0);
+#else
     err = snd_pcm_hw_params_set_period_size_near(pcm, params, &period_size, NULL);
+#endif
     if (err < 0)
     {
         logf("Unable to set period size %ld: %s", period_size, snd_strerror(err));
@@ -320,9 +336,8 @@ error:
  * caught in trimpod.log switching the speaker off.
  *
  * All three routes have stable names that need no cache invalidation:
- *   speaker   "Playback" -- /etc/asound.conf, which audiomon never touches.
- *              Measured identical to `default` (4.21 s vs 4.22 s for a 4.000 s
- *              file), so plug -> softvol -> dmix, and no pitch shift.
+ *   speaker   "Playback" on tg5040; "default" on H700, whose Rockbox mixer is
+ *              configured for the codec's native 48 kHz rate.
  *   usb       the card itself, found the way NextUI finds it; see usb_device().
  *   bluetooth the address audiomon just wrote into ~/.asoundrc, read as plain
  *              text rather than through alsa-lib's cached view of it. */
@@ -456,7 +471,11 @@ static bool dev_open(void)
         route = TRIMPOD_SINK_USB;
     }
     else
+#ifdef TRIMPOD_H700
+        name = "default";
+#else
         name = "Playback";
+#endif
 
     /* Serialises against the volume driver's mixer opens: both rebuild
      * alsa-lib's global config on first use. */

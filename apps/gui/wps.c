@@ -539,11 +539,20 @@ struct wps_page
 };
 
 #define WPS_LYRICS_X             0
-#define WPS_LYRICS_Y             74  /* original metadata/spectrum area */
 #define WPS_LYRICS_W             LCD_WIDTH
+#ifdef TRIMPOD_H700
+/* Same overlay as tg5040, fitted to the RG34XXSP WPS: preserve the playlist
+ * number/title above y=91 and the progress strip from y=192 down. */
+#define WPS_LYRICS_Y             46
+#define WPS_LYRICS_H             146
+#define WPS_LYRICS_CONTENT_Y     45
+#define WPS_LYRICS_AROUND        1
+#else
+#define WPS_LYRICS_Y             74  /* original metadata/spectrum area */
 #define WPS_LYRICS_H             233 /* keep y=307..383 progress/volume strip */
 #define WPS_LYRICS_CONTENT_Y     56  /* screen y=130: below number + title */
 #define WPS_LYRICS_AROUND        2
+#endif
 #define WPS_LYRICS_WRAP_ROWS     2
 #define WPS_LYRICS_ROW_GAP       4
 #define WPS_LYRICS_MANUAL_TICKS  (5 * HZ)

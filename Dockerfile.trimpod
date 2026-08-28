@@ -1,22 +1,33 @@
-# Trimpod build toolchain: LoveRetro tg5040 cross toolchain + fixups for
-# building Rockbox as an SDL application for the TrimUI Brick (NextUI).
-#  - `zip` is required by Rockbox's language/voice build step.
-#  - The sysroot's stock sdl2-config bakes in an absolute build-machine include
-#    path that does not exist here, so we shadow it with one that emits the
-#    real $SYSROOT paths (placed in /usr/local/bin which precedes /usr/bin).
-FROM ghcr.io/loveretro/tg5040-toolchain:latest
+# Shared TrimPod build layer over the official NextUI platform toolchains.
+ARG BASE_IMAGE=ghcr.io/loveretro/tg5040-toolchain:latest
+FROM ${BASE_IMAGE}
+
+ARG TRIMPOD_PLATFORM=tg5040
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         bison cmake flex g++ gcc libc6-dev libfreetype6-dev pkg-config python3 zip \
     && rm -rf /var/lib/apt/lists/*
 
+# H700's patched Mali-fbdev SDL is installed in PREFIX_LOCAL (/opt/nextui),
+# while tg5040 SDL lives in SYSROOT. Bake the requested platform into the
+# wrapper instead of guessing from directories that may coexist in an image.
 RUN printf '%s\n' \
     '#!/bin/sh' \
-    'inc="$SYSROOT/usr/include/SDL2"' \
+    "platform='$TRIMPOD_PLATFORM'" \
+    'if [ "$platform" = h700 ]; then' \
+    '  local_prefix="${PREFIX_LOCAL:-/opt/nextui}"' \
+    '  inc="$local_prefix/include/SDL2"' \
+    '  lib="$local_prefix/lib"' \
+    '  version="2.28.5"' \
+    'else' \
+    '  inc="$SYSROOT/usr/include/SDL2"' \
+    '  lib="$SYSROOT/usr/lib"' \
+    '  version="2.26.1"' \
+    'fi' \
     'case "$1" in' \
     '  --cflags) echo "-I$inc -D_REENTRANT" ;;' \
-    '  --libs|--static-libs) echo "-L$SYSROOT/usr/lib -lSDL2" ;;' \
-    '  --version) echo "2.26.1" ;;' \
+    '  --libs|--static-libs) echo "-L$lib -lSDL2" ;;' \
+    '  --version) echo "$version" ;;' \
     'esac' \
     > /usr/local/bin/sdl2-config \
     && chmod +x /usr/local/bin/sdl2-config

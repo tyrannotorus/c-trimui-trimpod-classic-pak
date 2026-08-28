@@ -1,0 +1,48 @@
+# 1ST_GEN_REMIX shared status layout for RG34XXSP (360x240).
+
+%wd
+%?Lt<|>
+%Fl(2,18-TrimpodUI.fnt)
+%Fl(3,20-TrimpodUI.fnt)
+%xl(sad_mac,sad_mac.bmp,0,0)
+%xl(playmodes,playmodes.bmp,0,0,9)
+%xl(repeat,repeat_status.bmp,0,0,5)
+%xl(shuffle,shuffle.bmp,0,0,2)
+%xl(battery,battery.bmp,0,0,5)
+%xl(lock,lock.bmp,0,0)
+%?if(%cs, =, 21)<%VI(clearScreen)%Vd(usbScreen)|%Vd(mainMenu)<%VI(mainMenu)%Vd(mainMenu)>>
+%?Tl<%Vd(legend)|>
+%Vi(clearScreen,0,0,1,1,-)
+
+%Vi(mainMenu,5,45,350,170,1)
+%Vl(mainMenu,10,7,22,22,-)
+%?if(%mp, >, 1)<%xd(playmodes,%mp)|>
+%Vl(mainMenu,65,8,230,24,3)
+%?if(%cs, =, 2)<%ac%s%?pn<%t(5)%Sx(Now Playing);%t(5)%pn|%ac%Sx(Now Playing)>|%?Lt<%ac%s%Lt|%acTrimPod%(RUS%)>>
+%Vl(mainMenu,314,9,40,18,2)
+%?if(%bl, >, 88)<%xd(battery,5)|%?if(%bl, >, 63)<%xd(battery,4)|%?if(%bl, >, 38)<%xd(battery,3)|%?if(%bl, >, 13)<%xd(battery,2)|%xd(battery,1)>>>>
+%Vl(mainMenu,296,9,14,18,-)
+%?mh<%xd(lock)|>
+%Vl(mainMenu,5,36,350,2,-)
+%dr(0,0,350,2)
+%Vl(mainMenu,5,218,350,18,2)
+%?if(%cs, =, 2)<|%ac%?mp<|%s%?it<%it|%fn>%?ia< - %ia>|>>
+%Vl(legend,10,8,285,24,3)
+%Tl
+
+%Vl(usbScreen,0,0,360,240,-)
+%Vl(usbScreen,40,10,280,25,3)
+%t(10)%ac%?cf<%ac%cH|%cl>:%cM%?cf<| %cP>;%t(10)%ac%Sx(Battery): %bl%%
+%Vl(usbScreen,314,9,40,18,2)
+%?if(%bl, >, 88)<%xd(battery,5)|%?if(%bl, >, 63)<%xd(battery,4)|%?if(%bl, >, 38)<%xd(battery,3)|%?if(%bl, >, 13)<%xd(battery,2)|%xd(battery,1)>>>>
+%Vl(usbScreen,5,36,350,2,-)
+%dr(0,0,350,2)
+%Vl(usbScreen,260,75,95,120,-)
+%xd(sad_mac)
+%Vl(usbScreen,5,95,250,27,3)
+%ac%Sx(USB Connected)%Vs(invert)
+%Vl(usbScreen,5,130,250,27,-)
+%dr(0,0,250,1)%dr(0,0,1,26)%dr(249,0,1,26)%dr(0,26,250,1)
+%Vl(usbScreen,6,138,245,18,2)
+%ac%t(1)! %Sx(Eject Before Disconnecting) !;%t(.1)%ac
+

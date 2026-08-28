@@ -874,7 +874,7 @@ rgnanocc () {
     rbdir="/FunKey/.rockbox"
 }
 
-# Retro-handheld (TrimUI Brick / NextUI tg5040) SDL-app config.
+# Retro-handheld NextUI SDL-app config.
 # Compiler/sysroot come from $CROSS_COMPILE in the build container; SDL via sdl2-config.
 rhhconf () {
     # Trimpod visualizer: link the vendored projectM (Milkdrop) static libs and
@@ -2948,6 +2948,32 @@ fi
     simcc "sdl-app"
     rhhconf
     LDOPTS="$LDOPTS -lasound" # codec mixer volume control (trimpod-alsa.c)
+    tool="cp "
+    boottool="cp "
+    bmp2rb_mono="$rootdir/tools/bmp2rb -f 0"
+    bmp2rb_native="$rootdir/tools/bmp2rb -f 9"
+    output="trimpod"
+    bootoutput="trimpod"
+    appextra="recorder:gui"
+    t_cpu="hosted"
+    t_manufacturer="sdl"
+    t_model="retro-handheld"
+    ;;
+
+   302|retro-handheld-h700)
+    target_id=125
+    application="yes"
+    modelname="retro-handheld-h700"
+    app_type="sdl-app"
+    target="RETRO_HANDHELD"
+    memory=64
+    uname=`uname`
+    extradefines="$extradefines -I$rootdir/lib/projectm/include -DTRIMPOD_H700"
+    simcc "sdl-app"
+    rhhconf
+    # H700's patched Mali-fbdev SDL lives in PREFIX_LOCAL rather than SYSROOT.
+    # Override only this target; tg5040 retains rhhconf's main-branch link line.
+    LDOPTS="-lm -ldl `$sdl --libs` -lpthread $pmlibs -lasound"
     tool="cp "
     boottool="cp "
     bmp2rb_mono="$rootdir/tools/bmp2rb -f 0"

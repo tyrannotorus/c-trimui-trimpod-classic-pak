@@ -27,7 +27,9 @@
 #define LYRICS_MAX_LINES       512
 #define LYRICS_MAX_FILE        (256 * 1024)
 #define LYRICS_CACHE_DIR_NAME  "lyrics"
+#ifndef TRIMPOD_H700
 #define LYRICS_WGET            "./bin/wget"
+#endif
 #define LYRICS_USER_AGENT      "TrimPod(RUS)/1.0.7-rus-0.3 " \
                                "(https://github.com/B3L4CQU4/" \
                                "c-trimui-trimpod-classic-pak-RUS)"
@@ -341,6 +343,18 @@ static void start_fetch(enum fetch_stage stage)
 
     /* The paths are generated locally and the URL is percent-encoded.  The
      * marker is written even on an HTTP/network error so polling never hangs. */
+#ifdef TRIMPOD_H700
+    /* NextUI's H700 port ships its own statically-linked curl in the system
+     * PATH because the stock Anbernic userspace has no dependable HTTP client.
+     * Use that native runtime instead of the tg5040-linked wget bundled here. */
+    snprintf(command, sizeof(command),
+             "(curl --silent --show-error --location --fail "
+             "--connect-timeout 10 --max-time 15 --retry 1 "
+             "--max-filesize 262144 --user-agent '%s' "
+             "--dump-header '%s' --output '%s' '%s'; "
+             "printf '%%d' $? > '%s') >/dev/null 2>&1 &",
+             LYRICS_USER_AGENT, status_path, response_path, url, marker_path);
+#else
     snprintf(command, sizeof(command),
              "(%s -T 10 -t 1 --quota=256k --no-check-certificate "
              "--user-agent='%s' --server-response -o '%s' "
@@ -348,6 +362,7 @@ static void start_fetch(enum fetch_stage stage)
              "printf '%%d' $? > '%s') >/dev/null 2>&1 &",
              LYRICS_WGET, LYRICS_USER_AGENT, status_path,
              response_path, url, marker_path);
+#endif
     if (system(command) < 0)
     {
         fetch_stage = FETCH_NONE;

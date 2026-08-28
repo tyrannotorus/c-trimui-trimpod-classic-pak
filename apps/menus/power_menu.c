@@ -120,6 +120,8 @@ extern void retrohh_cpu_set_freq(int khz);
 extern void retrohh_cpu_set_dynamic(void);
 extern int  retrohh_cpu_get_freq(void);
 extern bool retrohh_cpu_is_dynamic(void);
+extern int  retrohh_cpu_freq_count(void);
+extern int  retrohh_cpu_freq_at(int index);
 extern void retrohh_cpu_save_choice(int khz);   /* persistence lives in power-target.c */
 
 /* Charge Limit: caps charging at a % while Trimpod runs (power-target.c). The
@@ -128,22 +130,12 @@ extern bool retrohh_charge_limit_hidden(void);
 extern int  retrohh_charge_limit_get_target(void);
 extern void retrohh_charge_limit_cycle(int dir);
 
-static const int trimpod_cpu_freqs[] = {
-    408000, 600000, 816000, 1008000, 1200000, 1416000, 1608000, 1800000, 2000000
-};
-/* Display labels (MHz) paired 1:1 with trimpod_cpu_freqs (kHz). */
-static const char *const trimpod_cpu_labels[] = {
-    "408 MHz", "600 MHz", "816 MHz", "1008 MHz", "1200 MHz",
-    "1416 MHz", "1608 MHz", "1800 MHz", "2000 MHz"
-};
-#define TRIMPOD_CPU_NFREQS \
-    ((int)(sizeof(trimpod_cpu_freqs)/sizeof(trimpod_cpu_freqs[0])))
-
 static int trimpod_cpu_nearest_index(int khz)
 {
-    int idx = TRIMPOD_CPU_NFREQS - 1;
-    for (int i = 0; i < TRIMPOD_CPU_NFREQS; i++)
-        if (trimpod_cpu_freqs[i] >= khz) { idx = i; break; }
+    int count = retrohh_cpu_freq_count();
+    int idx = count - 1;
+    for (int i = 0; i < count; i++)
+        if (retrohh_cpu_freq_at(i) >= khz) { idx = i; break; }
     return idx;
 }
 
@@ -163,22 +155,26 @@ static void trimpod_cpu_changed(int khz, void *ctx)
  * derived from the live freq / bg_color each call. */
 static const char *tp_cpu_value_get(void *ctx, char *buf, int len)
 {
-    (void)ctx; (void)buf; (void)len;
+    (void)ctx;
     if (retrohh_cpu_is_dynamic())
         return (const char *)str(LANG_TRIMPOD_DYNAMIC);
-    return trimpod_cpu_labels[trimpod_cpu_nearest_index(retrohh_cpu_get_freq())];
+    int khz = retrohh_cpu_freq_at(
+        trimpod_cpu_nearest_index(retrohh_cpu_get_freq()));
+    snprintf(buf, len, "%d MHz", khz / 1000);
+    return buf;
 }
 static void tp_cpu_value_cycle(void *ctx, int dir)
 {
     (void)ctx;
+    int count = retrohh_cpu_freq_count();
     /* Virtual list: index 0 = "Dynamic" (first), 1..N = the fixed steps. */
     int vidx = retrohh_cpu_is_dynamic()
                  ? 0
                  : trimpod_cpu_nearest_index(retrohh_cpu_get_freq()) + 1;
     vidx += (dir < 0 ? -1 : 1);
     if (vidx < 0) vidx = 0;
-    if (vidx > TRIMPOD_CPU_NFREQS) vidx = TRIMPOD_CPU_NFREQS;
-    trimpod_cpu_changed(vidx == 0 ? 0 : trimpod_cpu_freqs[vidx - 1], NULL);
+    if (vidx > count) vidx = count;
+    trimpod_cpu_changed(vidx == 0 ? 0 : retrohh_cpu_freq_at(vidx - 1), NULL);
 }
 static const struct menu_value_cb trimpod_cpu_value =
     { tp_cpu_value_get, tp_cpu_value_cycle, NULL };

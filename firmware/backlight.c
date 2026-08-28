@@ -540,6 +540,12 @@ void backlight_close(void)
 
 void backlight_on(void)
 {
+#ifdef RETRO_HANDHELD
+    /* The RG34XXSP lid is a hard display-wake inhibit. Volume presses and
+     * background UI activity must not light a closed clamshell. */
+    if (power_lid_closed())
+        return;
+#endif
     if(!ignore_backlight_on)
     {
         queue_remove_from_head(&backlight_queue, BACKLIGHT_ON);

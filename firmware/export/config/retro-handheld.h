@@ -34,9 +34,14 @@
  * user-facing maintenance complexity. Leaving the tag database disabled removes
  * the Database menu, its settings, the scanner and tagcache/tagtree sources. */
 
-/* LCD dimensions */
+/* Platform-native logical dimensions. Both use an exact 2x SDL window. */
+#ifdef TRIMPOD_H700
+#define LCD_WIDTH  360
+#define LCD_HEIGHT 240
+#else
 #define LCD_WIDTH  512
 #define LCD_HEIGHT 384
+#endif
 #define LCD_DEPTH  24
 #define LCD_PIXELFORMAT RGB888
 

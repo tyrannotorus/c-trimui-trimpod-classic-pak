@@ -1,4 +1,4 @@
-# TrimPod(RUS) for TrimUI Brick / Brick Pro
+# TrimPod(RUS) for TrimUI Brick / Brick Pro / Anbernic RG34XXSP
 
 <img width="256" height="192" alt="Main menu" src="screenshots/main-menu.png" /><img width="256" height="192" alt="Now playing" src="screenshots/now-playing.png" /><img width="256" height="192" alt="Synchronized lyrics" src="screenshots/lyrics.png" />
 <img width="256" height="192" alt="Context menu" src="screenshots/context-menu.png" /><img width="256" height="192" alt="MilkDrop visualizer" src="screenshots/visualizer.png" />
@@ -7,7 +7,8 @@
 
 **TrimPod(RUS)** is a Russian-language fork of the original
 [TrimPod Classic](https://github.com/tyrannotorus/c-trimui-trimpod-classic-pak) by Werewolf Camp.
-This fork is maintained by [B3L4CQU4](https://github.com/B3L4CQU4) and targets TrimUI Brick Pro. It builds upon the original project's heavily modified Rockbox base and includes 100
+This fork is maintained by [B3L4CQU4](https://github.com/B3L4CQU4) and supports TrimUI Brick,
+Brick Pro and Anbernic RG34XXSP. It builds upon the original project's heavily modified Rockbox base and includes 100
 Winamp-inspired MilkDrop visualizations.
 
 ## User Disclaimer
@@ -19,13 +20,17 @@ liability for any damage to your device when it melts from awesomeness.
 ## Dev Disclaimer
 
 This fork retains substantial code from TrimPod Classic and Rockbox. Changes specific to the fork
-include Brick Pro/1024×768 adaptation, Russian localization, Cyrillic-capable fonts and a Russian
-UTF-8 keyboard. 
+include Brick Pro/1024×768 and RG34XXSP/H700 adaptations, Russian localization,
+Cyrillic-capable fonts and a Russian UTF-8 keyboard.
 Note: Like the original project, this one was designed by a human, but slop-coded via codex. I'm a frontend developer. Have mercy on me )
 
 ## Supported Platforms
 
 - **tg5040** — TrimUI Brick and TrimUI Brick Pro (`DEVICE=brick` / `brickpro`)
+- **h700** — Anbernic RG34XXSP (`DEVICE=rg34xx`, `RGXX_MODEL=RG34xxSP`)
+
+Other H700 models are deliberately rejected: their display geometry and controls have not been
+validated by this port.
 
 ## Features
 
@@ -33,7 +38,7 @@ Note: Like the original project, this one was designed by a human, but slop-code
 |---|---|
 | **Milkdrop / projectM visualizer** | Real-time, audio-reactive presets on a dedicated CPU core. A curated set ships; toggle them from Settings. |
 | **1st-gen iPod interface** | Chicago typography, chevron menus, page-slide transitions, and a Now Playing screen with scrolling track info. |
-| **Pixel-perfect display** | The 512×384 logical UI is enlarged exactly 2× to the 1024×768 panel with nearest-neighbour filtering. |
+| **Pixel-perfect display** | Brick uses 512×384 → 1024×768; RG34XXSP uses 360×240 → 720×480. Both are exact 2× nearest-neighbour layouts. |
 | **Russian interface** | Russian is the default; Settings → Language switches between Russian and English. Russian mode uses the pixel Mulmaru design for Cyrillic, Latin, digits and symbols with slightly wider glyph spacing; English keeps ChicagoFLF. The UTF-8 keyboard has RU/EN layouts. |
 | **Audio spectrum** | A live spectrum on the Now Playing screen. |
 | **Synchronized lyrics** | Press X in Now Playing to show local `.lrc` lyrics or fetch them from LRCLIB. The current line follows playback and is drawn larger; Up/Down scroll one line. |
@@ -49,6 +54,10 @@ Note: Like the original project, this one was designed by a human, but slop-code
 - `X` — show/hide synchronized lyrics in Now Playing.
 - D-pad or left stick — navigate; Up/Down scroll lyrics one line while lyrics are shown.
 - `L1` / `R1` — seek backward/forward by 10 seconds in Now Playing.
+
+RG34XXSP uses Xbox-style face-button semantics: the physical bottom button confirms as `A`, and
+the physical right button goes back as `B`. Closing the lid turns only the display off; playback
+continues, volume remains available, and opening the lid restores the previous display state.
 
 ## Lyrics
 
@@ -69,8 +78,8 @@ Pro. Its provenance, checksum and GPLv3 license are in `pak/licenses/`.
 ## Install
 
 1. Download `TrimPod(RUS).pak.zip` from the [latest release](https://github.com/B3L4CQU4/c-trimui-trimpod-classic-pak-RUS/releases).
-2. Copy it to `/mnt/SDCARD/Tools/tg5040/` (mount the SD card or `adb push`).
-3. Extract it so the `TrimPod(RUS).pak` folder lands directly in `/mnt/SDCARD/Tools/tg5040/`, then
+2. Copy it to `/mnt/SDCARD/Tools/tg5040/` on Brick or `/mnt/SDCARD/Tools/h700/` on RG34XXSP.
+3. Extract it so the `TrimPod(RUS).pak` folder lands directly in that platform directory, then
    delete the zip.
 4. On device, open **Tools → TrimPod(RUS)**.
 5. Put music under `/mnt/SDCARD/Music` (or add folders from Settings), then pick a track.
@@ -85,18 +94,19 @@ Pro. Its provenance, checksum and GPLv3 license are in `pak/licenses/`.
 
 ## Build
 
-Cross-compiled in the NextUI `tg5040` Docker toolchain. Needs `docker` (and `adb` to deploy).
+Cross-compiled in the official NextUI `tg5040` and `h700` Docker toolchains. Needs Docker (and
+ADB to deploy).
 
 ```sh
 # Required after changing projectM, and always performed by release CI:
 bash tools/build_projectm.sh
-./build.sh      # cross-compile Rockbox -> build-trimpod/trimpod (+ the runtime zip)
+./build.sh      # build main's build-trimpod plus build-trimpod-h700
+# ./build.sh h700 clean   # optional: clean H700-only build
+# ./build.sh tg5040      # optional: incremental tg5040-only build
 ./package.sh    # assemble the pak, release zip and LGPL relinking kit
 
-# Deploy: clear the destination FIRST. `adb push <dir> <existing-dir>` nests the
-# source inside it (you'd get "TrimPod(RUS).pak/TrimPod(RUS).pak/...") and leaves
-# stale files behind; removing it first makes the push land at the pak root.
-PAK="/mnt/SDCARD/Tools/tg5040/TrimPod(RUS).pak"
+# Deploy RG34XXSP. Clear the destination first so adb does not nest the pak.
+PAK="/mnt/SDCARD/Tools/h700/TrimPod(RUS).pak"
 adb shell "rm -rf \"$PAK\"" && adb push 'dist/TrimPod(RUS).pak' "$PAK"
 ```
 
@@ -108,24 +118,25 @@ checked-in corresponding source.
 `./build.sh clean` forces a fresh
 reconfigure. A full pak deploy resets on-device settings — the live
 config (`trimpod/config.cfg`) is bind-mounted from inside the pak, so replacing it restores defaults.
-For code-only changes, push just the rebuilt binary (`trimpod/trimpod`) instead of the whole pak.
+For code-only changes, push `trimpod/trimpod` on tg5040 or
+`runtimes/h700/trimpod/trimpod` on H700 instead of the whole pak.
 
 ### Architecture
 
 TrimPod(RUS), like the original TrimPod Classic, is a custom Rockbox **SDL-application target**
-(`retro-handheld`) that renders at a
-logical 512×384 and is enlarged exactly 2× to the 1024×768 display. It runs hosted under
-NextUI rather than on bare metal: `launch.sh` sources per-device sysfs paths, bind-mounts the pak's
-data dir to `/tmp/trimpod`, applies the CPU governor, and runs the binary — then tears all of that
-down on exit. Input is read natively through SDL like NextUI: the gamepad and volume rocker come in
-as SDL joystick events and the power key as an SDL keyboard scancode (no gptokeyb2 shim).
+(`retro-handheld`) with independent binaries and data trees for each platform. tg5040 renders at
+512×384; H700 renders at 360×240. Both are enlarged exactly 2× to their physical displays. The
+launcher keeps tg5040 in `trimpod/` as in `main` and selects `runtimes/h700` only on RG34XXSP, then
+bind-mounts it to `/tmp/trimpod`, and restores CPU, mixer and NextUI input state on exit. Brick input
+uses SDL. RG34XXSP reads its built-in controls and hall sensor directly from evdev while retaining
+SDL for external Bluetooth/USB controllers; no gptokeyb2 shim is used.
 
 ### Layout
 
 | Path | Role |
 |---|---|
 | `build.sh`, `package.sh` | build, then assemble the pak |
-| `Dockerfile.trimpod` | the toolchain image (NextUI tg5040 + font/build tools + an `sdl2-config` shim) |
+| `Dockerfile.trimpod` | shared layer over the official NextUI tg5040/H700 toolchains |
 | `pak/` | the pak skeleton: `launch.sh`, bundled Wget, licenses, `config.cfg`, `.sys` files (`pak.json` lives at the repo root) |
 | `assets/` | theme, language-aware UI font sources/output, icons and Milkdrop presets |
 | `third_party/` | complete upstream source archives required by bundled command-line tools |

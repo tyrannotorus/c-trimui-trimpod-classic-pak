@@ -458,7 +458,7 @@ struct about_line { const char *text; enum about_kind kind; };
 
 static const struct about_line about_lines[] = {
     { "TrimPod(RUS)",        AB_TITLE },
-    { "v1.0.7-rus-0.3",      AB_SUB   },
+    { "v1.0.7-rus-0.4",      AB_SUB   },
     { NULL,                  AB_GAP   },
     { "FORK BY",             AB_CAP   },
     { "B3L4CQU4",            AB_NAME  },

@@ -37,6 +37,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
 #include <alsa/asoundlib.h>
@@ -157,18 +158,28 @@ static void hw_dv_open(void)
 static char bt_ctl_name[128];
 static bool bt_ctl_looked_up;
 
+/* H700 exposes BlueALSA as an explicit control device; tg5040 historically
+ * resolves it through ctl.!default in audiomon's .asoundrc. */
+static const char *bt_amixer_device_arg(void)
+{
+    const char *device = getenv("TRIMPOD_BT_MIXER_DEVICE");
+    return device && strcmp(device, "bluealsa") == 0 ? "-D bluealsa " : "";
+}
+
 /* First A2DP simple control, as listed by amixer.  Same scan NextUI does. */
 static void bt_find_control(void)
 {
     FILE *fp;
-    char line[256];
+    char line[256], cmd[128];
 
     if (bt_ctl_looked_up)
         return;
     bt_ctl_looked_up = true;
     bt_ctl_name[0] = '\0';
 
-    fp = popen("amixer scontrols 2>/dev/null", "r");
+    snprintf(cmd, sizeof cmd, "amixer %sscontrols 2>/dev/null",
+             bt_amixer_device_arg());
+    fp = popen(cmd, "r");
     if (!fp)
         return;
 
@@ -375,8 +386,9 @@ static bool bt_set_percent(int percent)
     if (!bt_ctl_name[0])
         return false;
 
-    snprintf(cmd, sizeof cmd, "amixer -M sset \"%s\" %d%% >/dev/null 2>&1",
-             bt_ctl_name, percent);
+    snprintf(cmd, sizeof cmd,
+             "amixer %s-M sset \"%s\" %d%% >/dev/null 2>&1",
+             bt_amixer_device_arg(), bt_ctl_name, percent);
     return system(cmd) == 0;
 }
 

@@ -70,6 +70,8 @@ void button_touch_activity(void);
 /* Trimpod: true while a power-button short press has blanked the display in-app
  * (music keeps playing).  Consumers gate idle timers / stop the visualizer. */
 bool power_display_off(void);
+/* True while the RG34XXSP lid inhibits display wake-ups. */
+bool power_lid_closed(void);
 long button_get_w_tmo(int ticks);
 intptr_t button_get_data(void);
 

@@ -70,4 +70,14 @@ int joyaxis_to_button(int axis);
 /* Hardware hold/lock switch (Brick side toggle): true => input is blocked. */
 bool retrohh_hold_switch(void);
 
+/* H700 built-in controls are read directly from evdev. SDL remains active for
+ * external controllers, but its duplicate ANBERNIC-keys joystick is skipped. */
+bool retrohh_h700_active(void);
+bool retrohh_should_open_joystick(const char *name);
+void retrohh_evdev_init(void);
+int  retrohh_evdev_buttons(bool *power_held);
+
+/* RG34XXSP hall sensor: true while the clamshell is closed. */
+bool retrohh_lid_closed(void);
+
 #endif /* _BUTTON_TARGET_H_ */

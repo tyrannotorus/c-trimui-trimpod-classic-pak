@@ -1,103 +1,116 @@
 #!/usr/bin/env bash
-# Assemble dist/TrimPod(RUS).pak from the build, the bundled theme
-# (assets/theme), and the static pak files (pak/ -- launch.sh, licenses,
-# config.cfg and the .sys device files).
-# Run ./build.sh first (it produces the runtime zip via 'make fullzip').
-# The app's data dir is /tmp/trimpod (NOT /tmp/rockbox) to avoid clashing with
-# other Rockbox installs; inside the pak it lives in trimpod/ and the binary is
-# named "trimpod". "Rockbox" only remains in About/Credits.
+# Assemble one universal NextUI pak from the independent tg5040 and H700 builds.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-ZIP="$ROOT/build-trimpod/trimpod-full.zip"
 PAK="$ROOT/dist/TrimPod(RUS).pak"
-THEME="$ROOT/assets/theme/1ST_GEN_REMIX/.rockbox"
+PYTHON="${PYTHON:-python3}"
+THEME_TG="$ROOT/assets/theme/1ST_GEN_REMIX/.rockbox"
+THEME_H700="$ROOT/assets/theme/1ST_GEN_REMIX-H700/.rockbox"
+STATIC_RUNTIME="$ROOT/pak/trimpod"
 
-[ -n "$ZIP" ] && [ -f "$ZIP" ] || { echo "Missing build-trimpod/*-full.zip — run ./build.sh first."; exit 1; }
-
-echo ">> Staging runtime"
-rm -rf "$ROOT/dist"
-mkdir -p "$PAK"
-tmp="$(mktemp -d)"
-unzip -q "$ZIP" -d "$tmp"
-# The zip stores the runtime under tmp/trimpod/ (data dir = /tmp/trimpod).
-cp -a "$tmp/tmp/trimpod" "$PAK/trimpod"
-rm -rf "$tmp"
-
-for language in english russian; do
-    [ -f "$PAK/trimpod/langs/$language.lng" ] || {
-        echo "Build is missing $language.lng -- rerun ./build.sh clean." >&2
+for platform in tg5040 h700; do
+    if [ "$platform" = tg5040 ]; then
+        zip="$ROOT/build-trimpod/trimpod-full.zip"
+    else
+        zip="$ROOT/build-trimpod-h700/trimpod-full.zip"
+    fi
+    [ -f "$zip" ] || {
+        echo "Missing $zip -- run ./build.sh first." >&2
         exit 1
     }
 done
 
-echo ">> Pruning stock Rockbox themes (1ST_GEN_REMIX is the only theme)"
-# The build zip bundles the stock themes (cabbiev2, classic_statusbar, ...).
-# Drop them; keep only 1ST_GEN_REMIX + the failsafe the skin engine falls back to.
-find "$PAK/trimpod/themes" -type f \
-     ! -name 'rockbox_failsafe.cfg' ! -name 'rockbox_default_icons.cfg' -delete 2>/dev/null
-find "$PAK/trimpod/wps" -mindepth 1 -maxdepth 1 \
-     ! -name 'rockbox_failsafe*' -exec rm -rf {} + 2>/dev/null
-rm -rf "$PAK/trimpod/backdrops" 2>/dev/null
+rm -rf "$ROOT/dist"
+mkdir -p "$PAK"
 
-echo ">> Injecting 1ST_GEN_REMIX theme"
-cp -a "$THEME/wps/." "$PAK/trimpod/wps/"
-cp -a "$THEME/icons/." "$PAK/trimpod/icons/"
-cp -a "$THEME/themes/." "$PAK/trimpod/themes/"
+# Start with main's pak skeleton. The tg5040 runtime stays at pak/trimpod;
+# H700 alone is staged separately because it needs a different binary/theme.
+cp -a "$ROOT/pak/." "$PAK/"
+cp -a "$ROOT/pak.json" "$PAK/pak.json"
 
-echo ">> Pruning stock Rockbox fonts (only Trimpod UI fonts ship; Font menu removed)"
-# The build zip bundles the whole upstream font set (Terminus, Adobe-Helvetica, ...).
-# Nothing else references them; the language-aware theme uses the three
-# original ChicagoFLF files plus three generated TrimpodRus files below.
-rm -f "$PAK/trimpod/fonts/"*.fnt "$PAK/trimpod/fonts/COPYING-fonts.txt" 2>/dev/null || true
+stage_runtime() {
+    platform="$1"
+    if [ "$platform" = tg5040 ]; then
+        zip="$ROOT/build-trimpod/trimpod-full.zip"
+        runtime="$PAK/trimpod"
+    else
+        zip="$ROOT/build-trimpod-h700/trimpod-full.zip"
+        runtime="$PAK/runtimes/h700/trimpod"
+    fi
+    tmp="$(mktemp -d)"
 
-for family in ChicagoFLF TrimpodRus; do
-    for size in 18 20 24; do
-        [ -f "$ROOT/assets/fonts/${size}-${family}.fnt" ] || {
-            echo "Missing assets/fonts/${size}-${family}.fnt -- run ./build.sh first." >&2
+    echo ">> Staging $platform runtime"
+    unzip -q "$zip" -d "$tmp"
+    rm -rf "$runtime"
+    mkdir -p "$(dirname "$runtime")"
+    cp -a "$tmp/tmp/trimpod" "$runtime"
+    rm -rf "$tmp"
+
+    for language in english russian; do
+        [ -f "$runtime/langs/$language.lng" ] || {
+            echo "$platform build is missing $language.lng -- rerun ./build.sh $platform clean." >&2
             exit 1
         }
     done
-done
-echo ">> Injecting language-aware compact UI fonts"
-for family in ChicagoFLF TrimpodRus; do
-    for size in 18 20 24; do
-        cp "$ROOT/assets/fonts/${size}-${family}.fnt" "$PAK/trimpod/fonts/"
+
+    # Keep the fork's only supported theme plus Rockbox failsafes.
+    find "$runtime/themes" -type f \
+        ! -name 'rockbox_failsafe.cfg' ! -name 'rockbox_default_icons.cfg' \
+        -delete 2>/dev/null
+    find "$runtime/wps" -mindepth 1 -maxdepth 1 \
+        ! -name 'rockbox_failsafe*' -exec rm -rf {} + 2>/dev/null
+    rm -rf "$runtime/backdrops" 2>/dev/null
+
+    cp -a "$THEME_TG/wps/." "$runtime/wps/"
+    cp -a "$THEME_TG/icons/." "$runtime/icons/"
+    cp -a "$THEME_TG/themes/." "$runtime/themes/"
+    if [ "$platform" = h700 ]; then
+        # Text layouts are native 360x240. Raster sprites are derived from the
+        # checked-in 512x384 theme in staging, never by mutating source assets.
+        cp -a "$THEME_H700/wps/." "$runtime/wps/"
+        cp -a "$THEME_H700/themes/." "$runtime/themes/"
+        "$PYTHON" "$ROOT/tools/prepare_h700_theme.py" \
+            "$runtime/wps/1ST_GEN_REMIX"
+    fi
+
+    rm -f "$runtime/fonts/"*.fnt "$runtime/fonts/COPYING-fonts.txt" 2>/dev/null || true
+    for family in ChicagoFLF TrimpodRus; do
+        for size in 18 20 24; do
+            font="$ROOT/assets/fonts/${size}-${family}.fnt"
+            [ -f "$font" ] || {
+                echo "Missing $font -- run ./build.sh first." >&2
+                exit 1
+            }
+            cp "$font" "$runtime/fonts/"
+        done
     done
-done
-cp "$ROOT/assets/fonts/COPYING" "$PAK/trimpod/fonts/COPYING-fonts.txt"
-cp "$ROOT/assets/fonts/sources/Mulmaru-OFL.txt" \
-   "$PAK/trimpod/fonts/OFL-Mulmaru.txt"
+    cp "$ROOT/assets/fonts/COPYING" "$runtime/fonts/COPYING-fonts.txt"
+    cp "$ROOT/assets/fonts/sources/Mulmaru-OFL.txt" \
+       "$runtime/fonts/OFL-Mulmaru.txt"
 
-echo ">> Injecting Milkdrop visualizer presets (see assets/presets)"
-mkdir -p "$PAK/trimpod/presets"
-# Ship the curated flat preset set (Settings -> Visualizers toggles them on/off).
-cp -r "$ROOT/assets/presets/." "$PAK/trimpod/presets/"
+    mkdir -p "$runtime/presets"
+    cp -r "$ROOT/assets/presets/." "$runtime/presets/"
 
-echo ">> Overlaying the static pak files (pak/: launch.sh, licenses, config, .sys)"
-# pak/ mirrors the deployed pak skeleton; its trimpod/ merges onto the built one.
-# pak.json lives at the repo root (the Pak Store reads it there); copy it in too.
-cp -a "$ROOT/pak/." "$PAK/"
-cp -a "$ROOT/pak.json" "$PAK/pak.json"
-# A Windows checkout may already contain CRLF files created before the
-# .gitattributes policy was introduced.  A trailing CR becomes part of every
-# exported sysfs path when BusyBox sh sources a .sys file, so hardware writes
-# silently target names such as ".../brightness\r".  Normalize the deployed
-# shell inputs unconditionally.
+    # config.cfg and systems/*.sys are shared source files. Platform-specific
+    # paths are selected by launch.sh at runtime.
+    cp -a "$STATIC_RUNTIME/." "$runtime/"
+    chmod +x "$runtime/trimpod"
+}
+
+stage_runtime tg5040
+stage_runtime h700
+
+# CR in a sourced .sys file becomes part of its sysfs path under BusyBox sh.
 find "$PAK" -type f \( -name '*.sh' -o -name '*.sys' \) \
-     -exec sed -i 's/\r$//' {} +
-chmod +x "$PAK/launch.sh" "$PAK/trimpod/trimpod" "$PAK/bin/wget"
+    -exec sed -i 's/\r$//' {} +
+chmod +x "$PAK/launch.sh" "$PAK/bin/wget"
 
-echo ">> Packaging the Pak Store release asset (dist/TrimPod(RUS).pak.zip)"
-# NextUI Pak Store: the zip's ROOT must be the contents of the .pak directory
-# (launch.sh, pak.json, trimpod/, ...) -- the store names the installed folder
-# from pak.json "name".  The filename must match release_filename in pak.json,
-# and the GitHub release tag must match the pak.json "version".
-rm -f "$ROOT/dist/TrimPod(RUS).pak.zip"
+echo ">> Packaging dist/TrimPod(RUS).pak.zip"
 if command -v zip >/dev/null 2>&1; then
     ( cd "$PAK" && zip -qr "$ROOT/dist/TrimPod(RUS).pak.zip" . )
-else   # no 'zip' binary -- fall back to python3 (contents at archive root)
-    ( cd "$PAK" && python3 -c "import shutil,sys; shutil.make_archive(sys.argv[1],'zip','.')" \
+else
+    ( cd "$PAK" && "$PYTHON" -c "import shutil,sys; shutil.make_archive(sys.argv[1],'zip','.')" \
           "$ROOT/dist/TrimPod(RUS).pak" )
 fi
 
@@ -105,7 +118,7 @@ echo ">> Done: $PAK"
 du -sh "$PAK"
 du -h "$ROOT/dist/TrimPod(RUS).pak.zip"
 
-# projectM is LGPL and linked statically. Publish the matching machine-readable
-# object files and library source needed to substitute it and relink TrimPod.
+# projectM is LGPL and linked statically. Include relinking materials for both
+# independently built platform binaries.
 bash "$ROOT/tools/package_relink_kit.sh"
 du -h "$ROOT/dist/TrimPod(RUS)-relink-kit.tar.gz"

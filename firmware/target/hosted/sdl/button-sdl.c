@@ -65,8 +65,11 @@ extern bool mapping;
 static long power_down_tick = 0;        /* current_tick of power press (0 = up) */
 static bool power_blanked   = false;    /* display blanked by a power short press */
 static bool power_key_held  = false;    /* set from SDL_SCANCODE_POWER key events */
+static bool lid_closed      = false;    /* RG34XXSP hall sensor state */
+static bool lid_restore_backlight = false;
 
-bool power_display_off(void) { return power_blanked; }
+bool power_display_off(void) { return power_blanked || lid_closed; }
+bool power_lid_closed(void) { return lid_closed; }
 
 /* The TrimUI gamepad is read directly through SDL's joystick layer (no gptokeyb2
  * shim), mirroring NextUI: open every joystick at loop start, translate
@@ -97,7 +100,19 @@ static void open_joysticks(void)
     {
         joysticks = malloc(sizeof(*joysticks) * num_joysticks);
         for (int i = 0; i < num_joysticks; i++)
+        {
+#if SDL_MAJOR_VERSION > 1
+            const char *name = SDL_JoystickNameForIndex(i);
+            if (!retrohh_should_open_joystick(name))
+            {
+                joysticks[i] = NULL;
+                DEBUGF("Skipping built-in joystick %d: %s (evdev)\n", i,
+                       name ? name : "unknown");
+                continue;
+            }
+#endif
             joysticks[i] = SDL_JoystickOpen(i);
+        }
     }
 }
 
@@ -232,7 +247,10 @@ static bool event_handler(SDL_Event *event)
          * button_read_device.  Everything else is the simulator keymap. */
         if (event->key.keysym.scancode == SDL_SCANCODE_POWER)
         {
-            power_key_held = (event->type == SDL_KEYDOWN);
+            /* H700 reads the PMIC node directly; accepting both paths would
+             * create a release edge before evdev has drained. */
+            if (!retrohh_h700_active())
+                power_key_held = (event->type == SDL_KEYDOWN);
             break;
         }
         ev_key = event->key.keysym.sym;
@@ -398,6 +416,37 @@ int button_read_device(int* data)
 int button_read_device(void)
 {
 #endif
+    bool raw_power = false;
+    int raw_buttons = retrohh_evdev_buttons(&raw_power);
+    if (retrohh_h700_active())
+        power_key_held = raw_power;
+
+    /* RG34XXSP lid policy: close only blanks the display; playback, decoding,
+     * Bluetooth and USB audio keep running. Restore the previous display state
+     * on open, and never wake a closed panel from a volume key. */
+    {
+        bool now_closed = retrohh_lid_closed();
+        if (now_closed != lid_closed)
+        {
+            if (now_closed)
+            {
+                lid_restore_backlight = !power_blanked && is_backlight_on(true);
+                lid_closed = true;
+                backlight_off();
+                btn = BUTTON_NONE;
+                hat_directions = BUTTON_NONE;
+                stick_directions = BUTTON_NONE;
+            }
+            else
+            {
+                lid_closed = false;
+                if (lid_restore_backlight)
+                    backlight_on();
+                lid_restore_backlight = false;
+            }
+        }
+    }
+
     /* Trimpod: power button (held state tracked from SDL_SCANCODE_POWER events).
      * Match NextUI's timing -- a short press (held < 1s) toggles the display
      * off/on in-app while music keeps playing; a long press (>= 1s) powers off.
@@ -416,7 +465,8 @@ int button_read_device(void)
         }
         else if (power_down_tick)           /* released */
         {
-            if (current_tick - power_down_tick < POWER_LONG_PRESS_TICKS)
+            if (!lid_closed &&
+                current_tick - power_down_tick < POWER_LONG_PRESS_TICKS)
             {   /* Short press: if the screen is dark -- whether from a manual
                  * blank OR an Auto-Screen-Off timeout -- WAKE it, like any other
                  * button (is_backlight_on() is the real state; power_blanked
@@ -459,12 +509,17 @@ int button_read_device(void)
 
     /* Volume rocker arrives as joystick buttons 14/13 (folded into btn by
      * event_handler, like every other gamepad key) -- no separate read here. */
-    int result = btn;
+    int result = btn | raw_buttons;
+
+    /* Closed clamshell accepts only volume and long Power. Power is handled
+     * above and is never returned as a UI button. */
+    if (lid_closed)
+        result &= BUTTON_VOL_UP | BUTTON_VOL_DOWN;
 
     /* Any non-power button wakes the screen (backlight_on() in button_tick), so
      * a manual power-blank is over -- the next power tap blanks again rather
      * than being treated as a wake. */
-    if (result != 0)
+    if (result != 0 && !lid_closed)
         power_blanked = false;
 
     return result;
@@ -472,4 +527,5 @@ int button_read_device(void)
 
 void button_init_device(void)
 {
+    retrohh_evdev_init();
 }

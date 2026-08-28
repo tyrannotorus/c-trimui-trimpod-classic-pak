@@ -31,6 +31,8 @@ void retrohh_cpu_set_freq(int khz);   /* pin CPU to khz (performance) */
 void retrohh_cpu_set_dynamic(void);   /* Dynamic: tuned interactive, full range */
 int  retrohh_cpu_get_freq(void);      /* current scaling_cur_freq in khz */
 bool retrohh_cpu_is_dynamic(void);    /* true unless pinned (performance) */
+int  retrohh_cpu_freq_count(void);    /* supported fixed steps for this build */
+int  retrohh_cpu_freq_at(int index);  /* supported fixed step in kHz */
 void retrohh_cpu_save_choice(int khz);/* persist choice (khz<=0 -> dynamic) */
 void retrohh_cpu_apply_saved(void);   /* apply persisted choice (call at startup) */
 

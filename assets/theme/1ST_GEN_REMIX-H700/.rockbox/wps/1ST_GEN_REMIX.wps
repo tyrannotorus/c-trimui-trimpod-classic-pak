@@ -1,0 +1,36 @@
+# 1ST_GEN_REMIX Now Playing layout for RG34XXSP (360x240).
+
+%we
+%V(0,0,-,-,-)%VB
+%V(0,0,-,-,-)
+%Fl(2,18-TrimpodUI.fnt)
+%Fl(3,20-TrimpodUI.fnt)
+%xl(PB,pb.bmp,0,0)
+%xl(PBB,pb_back.bmp,0,0)
+%Vd(mainDisplay)
+
+%Vl(mainDisplay,0,39,360,201,-)
+%Vl(mainDisplay,8,46,280,20,2)
+%?if(%pp, =, %pe)<%pp %Sx(of) %pe|%pp %Sx(of) %pe|%pp %Sx(of) %pe|%pp %Sx(of) %pe|%pp %Sx(of) %pe>
+%Vl(mainDisplay,10,62,340,30,1)
+%ac%s%?it<%s%it|%fn>
+%Vl(mainDisplay,10,91,340,30,1)
+%ac%s%?ia<%ia>
+%Vl(mainDisplay,10,119,340,30,1)
+%ac%s%?id<%id>
+%Vl(mainDisplay,20,152,320,36,-)
+%pm
+
+%V(0,0,1,1,-)
+%?mv(2)<%Vd(npVolume)|%Vd(npProgress)>
+%Vl(npProgress,20,192,320,14,-)%Vf(-)%Vb(-)
+%pb(0,0,-,14,PBB,backdrop,PB)
+%Vl(npProgress,20,210,100,25,1)
+%al%pc
+%Vl(npProgress,275,210,65,25,1)
+%ar-%pr
+%Vl(npVolume,20,192,320,14,-)%Vf(-)%Vb(-)
+%pv(0,0,-,14,PBB,backdrop,PB)
+%Vl(npVolume,20,210,320,25,1)
+%acVolume %vv
+

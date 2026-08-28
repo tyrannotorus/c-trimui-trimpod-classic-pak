@@ -468,8 +468,13 @@ drivers/audio/aic310x.c
 #endif /* defined(HAVE_*) */
 #else /* PLATFORM_HOSTED */
 #if defined(HAVE_SDL_AUDIO) || defined(SIMULATOR)
+#ifdef TRIMPOD_H700
+drivers/audio/sdl.c
+target/hosted/sdl/pcm-sdl.c
+#else
 drivers/audio/trimpod-alsa.c
 target/hosted/sdl/pcm-alsa.c
+#endif
 #endif
 #endif /* (CONFIG_PLATFORM & PLATFORM_NATIVE) */
 #endif /* !defined(BOOTLOADER) */

@@ -1,4 +1,4 @@
-# Builds the pak in the public tg5040 toolchain and publishes the Pak Store
+# Builds both platform runtimes in the public NextUI toolchains and publishes the Pak Store
 # release assets whenever a v* tag is pushed.
 #
 # The NextUI Pak Store pulls the asset named release_filename in pak.json from
@@ -28,7 +28,7 @@ jobs:
           [ "$ver" = "${GITHUB_REF_NAME}" ] || {
             echo "::error::pak.json version ($ver) != tag (${GITHUB_REF_NAME})"; exit 1; }
 
-      - name: Build (Docker tg5040 toolchain)
+      - name: Build (Docker tg5040 + H700 toolchains)
         run: |
           bash tools/build_projectm.sh
           ./build.sh clean

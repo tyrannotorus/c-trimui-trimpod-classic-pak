@@ -11,8 +11,8 @@ From WSL/Linux with Docker available:
 bash tools/build_projectm.sh
 ```
 
-This cross-compiles the checked-in projectM 4.1.6 source for the NextUI
-`tg5040` target and replaces:
+This cross-compiles the checked-in projectM 4.1.6 source as AArch64 archives
+used by both NextUI `tg5040` and `h700` TrimPod runtimes, and replaces:
 
 ```text
 lib/projectm/lib/libprojectM-4.a
@@ -38,11 +38,13 @@ The normal source build relinks the executable against the two archives:
 ```
 
 For a published release, download its repository source archive and matching
-`TrimPod(RUS)-relink-kit.tar.gz`, extract both so that `build-trimpod/` is at the
-repository root, replace the archives as described above, and run `./build.sh`.
-The relink kit contains the machine-readable Rockbox object files, generated
-headers and make metadata from that release, so replacing an LGPL library does
-not require reverse-engineering the application binary.
+`TrimPod(RUS)-relink-kit.tar.gz`, extract both so that
+`build-trimpod/` and `build-trimpod-h700/` are at the repository root,
+replace the archives as described above, and run `./build.sh`. The relink kit
+contains the machine-readable Rockbox object files, generated headers and make
+metadata for both runtimes, so replacing an LGPL library does not require
+reverse-engineering either application binary.
 
-The resulting executable is `build-trimpod/trimpod`. Packaging it for the
-device is a separate step performed by `./package.sh`.
+The resulting executables are `build-trimpod/trimpod` and
+`build-trimpod-h700/trimpod`. Packaging them is a separate step performed by
+`./package.sh`.
