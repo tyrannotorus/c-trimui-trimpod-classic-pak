@@ -67,6 +67,7 @@
 #include "trimpod_visualizer.h"
 #include "trimpod_lyrics.h"
 #include "statusbar-skinned.h"
+#include "scroll_engine.h"
 #include "skin_engine/wps_internals.h"
 
 
@@ -675,29 +676,32 @@ static void wps_lyrics_sync_track(struct wps_page *w,
 
 static void wps_lyrics_stop_covered_scrollers(void)
 {
-    struct gui_wps *gwps = skin_get_gwps(WPS, SCREEN_MAIN);
-    struct wps_data *data = gwps->data;
-    char *skin_buffer = get_skin_buffer(data);
-    struct skin_element *element;
     const int top = WPS_LYRICS_Y + WPS_LYRICS_CONTENT_Y;
     const int bottom = WPS_LYRICS_Y + WPS_LYRICS_H;
+    int index = 0;
 
-    if (!skin_buffer)
-        return;
-
-    for (element = SKINOFFSETTOPTR(skin_buffer, data->tree);
-         element;
-         element = SKINOFFSETTOPTR(skin_buffer, element->next))
+    /* Inspect the active LCD scrollers themselves instead of inferring them
+     * from the parsed skin tree.  On H700 a long album marquee presents from
+     * the scroll thread, so any covered line left registered can repaint over
+     * the lyrics between ordinary WPS frames. */
+    while (index < lcd_scroll_info.lines)
     {
-        struct skin_viewport *skin_vp =
-            SKINOFFSETTOPTR(skin_buffer, element->data);
-        struct viewport *vp;
+        struct scrollinfo *scroll = &lcd_scroll_info.scroll[index];
+        struct viewport *vp = scroll->vp;
+        const int scroll_top = vp->y + scroll->y;
+        const int scroll_bottom = scroll_top + scroll->height;
 
-        if (!skin_vp)
-            continue;
-        vp = &skin_vp->vp;
-        if (vp->y < bottom && vp->y + vp->height > top)
-            gwps->display->scroll_stop_viewport(vp);
+        if (scroll_top < bottom && scroll_bottom > top)
+        {
+            /* This compacts lcd_scroll_info.scroll, so examine the same index
+             * again after removing the current entry. */
+            lcd_scroll_stop_viewport_rect(vp, scroll->x, scroll->y,
+                                          scroll->width, scroll->height);
+        }
+        else
+        {
+            index++;
+        }
     }
 }
 
