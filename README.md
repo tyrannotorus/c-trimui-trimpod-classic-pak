@@ -33,6 +33,7 @@ as far as top-down architecture but 100% slop-coded. Thus beware when forking. H
 | **Audio spectrum** | A live spectrum on the Now Playing screen. |
 | **iPod volume bar** | The volume rocker works from any screen; a momentary iPod-style bar shows the level. |
 | **Folder-based music** | Browse your own source folders rather than a fixed library (default `/mnt/SDCARD/Music`; add more in Settings). |
+| **Audiobooks (.m4b)** | Every book resumes exactly where you left off, and L2/R2 skip between its chapters (default `/mnt/SDCARD/Audiobooks`; add folders in Settings). |
 | **Colour themes** | Several iPod colour palettes (Settings → Power → Color). |
 
 ## Install
