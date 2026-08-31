@@ -362,6 +362,8 @@ enum {
     ACTION_USB_HID_LAST, /* Place holder */
 
     ACTION_TP_HOME, /* Trimpod: hold BACK -> jump to the main menu (home) */
+    ACTION_TP_CHAP_PREV, /* Trimpod: L2 -> previous chapter (m4b audiobooks) */
+    ACTION_TP_CHAP_NEXT, /* Trimpod: R2 -> next chapter (m4b audiobooks) */
 
     LAST_ACTION_PLACEHOLDER, /* custom actions should be this + something */
 };

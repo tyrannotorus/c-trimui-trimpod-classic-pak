@@ -565,30 +565,6 @@ bool curr_cuesheet_skip(struct cuesheet *cue, int direction, unsigned long curr_
 
 }
 
-static inline void draw_veritcal_line_mark(struct screen * screen,
-                                           int x, int y, int h)
-{
-    screen->set_drawmode(DRMODE_COMPLEMENT);
-    screen->vline(x, y, y+h-1);
-}
-
-/* draw the cuesheet markers for a track of length "tracklen",
-   between (x,y) and (x+w,y) */
-void cue_draw_markers(struct screen *screen, struct cuesheet *cue,
-                      unsigned long tracklen,
-                      int x, int y, int w, int h)
-{
-    int i,xi;
-    unsigned long tracklen_seconds = tracklen/1000; /* duration in seconds */
-
-    for (i=1; i < cue->track_count; i++)
-    {
-        /* Convert seconds prior to multiplication to avoid overflow. */
-        xi = x + (w * (cue->tracks[i].offset/1000)) / tracklen_seconds;
-        draw_veritcal_line_mark(screen, xi, y, h);
-    }
-}
-
 bool cuesheet_subtrack_changed(struct mp3entry *id3)
 {
     struct cuesheet *cue = id3->cuesheet;

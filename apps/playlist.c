@@ -75,6 +75,7 @@
 #include <ctype.h>
 #include "string-extra.h"
 #include "playlist.h"
+#include "trimpod_m4b.h"
 #include "ata_idle_notify.h"
 #include "file.h"
 #include "fs_attr.h"
@@ -3492,6 +3493,7 @@ int playlist_update_resume_info(const struct mp3entry* id3)
                         (playlist->flags & PLAYLIST_FLAG_MODIFIED));
     if (id3)
     {
+        trimpod_m4b_resume_note(id3);  /* m4b audiobooks: per-file position */
         if (global_status.resume_index  != playlist->index ||
             global_status.resume_elapsed != id3->elapsed ||
             global_status.resume_offset != id3->offset ||

@@ -78,11 +78,6 @@ int cue_find_current_track(struct cuesheet *cue, unsigned long curpos);
 /* skip to next track in the cuesheet towards "direction" (which is 1 or -1) */
 bool curr_cuesheet_skip(struct cuesheet *cue, int direction, unsigned long curr_pos);
 
-/* draw track markers on the progressbar */
-void cue_draw_markers(struct screen *screen, struct cuesheet *cue,
-                      unsigned long tracklen,
-                      int x, int y, int w, int h);
-
 /* check if the subtrack has changed */
 bool cuesheet_subtrack_changed(struct mp3entry *id3);
 

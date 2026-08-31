@@ -46,7 +46,6 @@ static const struct button_mapping button_context_standard[]  = {
     { ACTION_STD_CANCEL,        BUTTON_B|BUTTON_REL,        BUTTON_B },
     { ACTION_STD_MENU,          BUTTON_Y|BUTTON_REL,        BUTTON_Y },
     { ACTION_STD_CONTEXT,       BUTTON_START|BUTTON_REL,    BUTTON_START },
-    {ACTION_STD_KEYLOCK,        BUTTON_L2|BUTTON_R2,        BUTTON_NONE},
 
     LAST_ITEM_IN_LIST
 }; /* button_context_standard */
@@ -55,6 +54,7 @@ static const struct button_mapping button_context_standard[]  = {
  *   A            = play / pause + Now Playing menu (incl. Start Visualizer)
  *   D-pad <- ->  = previous / next track
  *   L1 / R1      = seek -10s / +10s in the current track
+ *   L2 / R2      = previous / next chapter (m4b audiobooks)
  *   Volume +/-   = volume (dedicated hardware rocker)
  *   B            = back to the browser (hold >1s = main menu / home)
  * All other buttons intentionally do nothing on this screen. */
@@ -64,6 +64,8 @@ static const struct button_mapping button_context_wps[]  = {
     { ACTION_WPS_SKIPNEXT,  BUTTON_RIGHT|BUTTON_REL,        BUTTON_RIGHT },
     { ACTION_WPS_SEEKBACK,  BUTTON_L|BUTTON_REL,            BUTTON_L },
     { ACTION_WPS_SEEKFWD,   BUTTON_R|BUTTON_REL,            BUTTON_R },
+    { ACTION_TP_CHAP_PREV,  BUTTON_L2|BUTTON_REL,           BUTTON_L2 },
+    { ACTION_TP_CHAP_NEXT,  BUTTON_R2|BUTTON_REL,           BUTTON_R2 },
     /* the volume rocker is consumed globally (global_volume_action) */
     { ACTION_WPS_BROWSE,    BUTTON_B|BUTTON_REL,            BUTTON_B },
     LAST_ITEM_IN_LIST
