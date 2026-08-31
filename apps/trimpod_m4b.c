@@ -10,17 +10,17 @@
  *    moments the global resume point is (track change/finish/stop -- and app
  *    shutdown, which stops audio through that same path -- via
  *    playlist_update_resume_info), and an entry is dropped when its book
- *    plays to the end.  Paths are canonicalised
- *    with realpath() so the tmpfs virtual-folder farm and the real SD path
- *    name the same book.
+ *    plays to the end.  Paths are canonicalised with realpath() so the tmpfs
+ *    virtual-folder farm and the real SD path name the same book.
  *
  * 2. Chapter extraction.  m4b chapters come as a QuickTime chapter track
  *    (audio trak -> tref/chap -> text trak; titles are the track's samples)
  *    or as a Nero chpl atom in moov/udta.  Both real-world books on hand use
  *    the QT form and only one carries chpl, so QT is primary and chpl the
  *    fallback.  The result fills the stock cuesheet struct, which buys the
- *    whole existing subtrack machinery: chapter skip and the skin tokens.  Parsed on the audio thread from audio_load_cuesheet(); the
- *    scratch context is static to spare that thread's small stack. */
+ *    whole existing subtrack machinery: chapter skip and the skin tokens.
+ *    Parsed on the audio thread from audio_load_cuesheet(); the scratch
+ *    context is static to spare that thread's small stack. */
 
 #include "config.h"
 
