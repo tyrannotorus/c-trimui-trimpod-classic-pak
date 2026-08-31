@@ -59,6 +59,7 @@
 #include "trimpod_hold.h"
 #include "trimpod_ui.h"
 #include "trimpod_library.h"
+#include "trimpod_m4b.h"
 #include "rbunicode.h"
 #include "dsp_core.h"
 #include "dircache.h"
@@ -218,6 +219,12 @@ static void init(void)
     settings_reset();
     settings_load();
     settings_apply(true);
+    /* Trimpod: m4b chapters ride the cuesheet engine, so force it on (the
+     * setting is unexposed and stale configs may say off; must precede
+     * audio_init so the scratch buffer reserves the cuesheet slot), and load
+     * the per-file audiobook resume positions. */
+    global_settings.cuesheet = true;
+    trimpod_m4b_resume_init();
 #ifdef RETRO_HANDHELD
     /* Apply the persisted CPU Frequency choice (Settings -> Power -> CPU).
      * power-target.c is the single owner of CPU policy; launch.sh only saves and

@@ -358,9 +358,8 @@ void draw_progressbar(struct gui_wps *gwps, struct skin_viewport* skin_viewport,
                 ab_draw_markers(display, id3->length, x, y, width, height);
 #endif
 
-            if (id3->cuesheet)
-                cue_draw_markers(display, id3->cuesheet, id3->length,
-                                 x, y+1, width, height-2);
+            /* Trimpod: no chapter tick marks on the progress bar -- the
+             * inverted lines read as artifacts against the themed bar. */
         }
     }
 }

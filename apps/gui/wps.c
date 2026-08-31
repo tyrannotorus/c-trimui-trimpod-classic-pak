@@ -299,6 +299,8 @@ static void gwps_caption_backlight(struct wps_state *state)
     }
 }
 
+/* Trimpod: chapters (cuesheet subtracks) never remap the D-pad -- prev/next
+ * stay whole-file skips; chapter navigation is L2/R2 (ACTION_TP_CHAP_*). */
 static void prev_track(unsigned long skip_thresh)
 {
     struct wps_state *state = get_wps_state();
@@ -309,12 +311,6 @@ static void prev_track(unsigned long skip_thresh)
     }
     else
     {
-        if (state->id3->cuesheet)
-        {
-            curr_cuesheet_skip(state->id3->cuesheet, -1, state->id3->elapsed);
-            return;
-        }
-
         audio_pre_ff_rewind();
         audio_ff_rewind(0);
     }
@@ -322,37 +318,15 @@ static void prev_track(unsigned long skip_thresh)
 
 static void next_track(void)
 {
-    struct wps_state *state = get_wps_state();
-    /* take care of if we're playing a cuesheet */
-    if (state->id3->cuesheet)
-    {
-        if (curr_cuesheet_skip(state->id3->cuesheet, 1, state->id3->elapsed))
-        {
-            /* if the result was false, then we really want
-               to skip to the next track */
-            return;
-        }
-    }
-
     audio_next();
 }
 
 static void play_hop(int direction)
 {
     struct wps_state *state = get_wps_state();
-    struct cuesheet *cue = state->id3->cuesheet;
     long step = global_settings.skip_length*1000;
     long elapsed = state->id3->elapsed;
     long remaining = state->id3->length - elapsed;
-
-    /* if cuesheet is active, then we want the current tracks end instead of
-     * the total end */
-    if (cue && (cue->curr_track_idx+1 < cue->track_count))
-    {
-        int next = cue->curr_track_idx+1;
-        struct cue_track_info *t = &cue->tracks[next];
-        remaining = t->offset - elapsed;
-    }
 
     if (step < 0)
     {
@@ -810,6 +784,20 @@ static enum trimpod_page_result wps_page_on_action(struct trimpod_page *p,
             case ACTION_WPS_SKIPNEXT:
                 w->last_right = current_tick;
                 play_hop(1);
+                break;
+
+            /* L2 / R2: previous / next chapter (m4b audiobooks; no-op when
+             * the track has no chapters). */
+            case ACTION_TP_CHAP_PREV:
+            case ACTION_TP_CHAP_NEXT:
+                if ((audio_status() & AUDIO_STATUS_PLAY) && state->id3
+                    && state->id3->cuesheet)
+                {
+                    curr_cuesheet_skip(state->id3->cuesheet,
+                                       button == ACTION_TP_CHAP_NEXT ? 1 : -1,
+                                       state->id3->elapsed);
+                    w->update = true;
+                }
                 break;
             /* menu key functions */
             case ACTION_WPS_MENU:

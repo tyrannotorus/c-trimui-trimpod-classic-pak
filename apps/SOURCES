@@ -37,6 +37,7 @@ trimpod_spectrum.c
 trimpod_eq.c
 trimpod_mainmenu.c
 trimpod_hold.c
+trimpod_m4b.c
 playlist.c
 playlist_catalog.c
 playlist_viewer.c

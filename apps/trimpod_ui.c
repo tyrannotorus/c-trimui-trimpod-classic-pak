@@ -259,7 +259,7 @@ struct about_line { const char *text; enum about_kind kind; };
 
 static const struct about_line about_lines[] = {
     { "Trimpod Classic",     AB_TITLE },
-    { "v1.0.7",              AB_SUB   },
+    { "v1.0.8",              AB_SUB   },
     { NULL,                  AB_GAP   },
     { "MADE BY",             AB_CAP   },
     { "Werewolf Camp",       AB_NAME  },
@@ -536,7 +536,14 @@ static void message_draw(struct trimpod_page *self)
         if (w > block) block = w;                 /* the widest row sets the left edge */
     }
 
-    const int line = fh + 8;
+    /* 8px leading, shrunk as needed so tall row lists still fit the page */
+    int pad = 8;
+    if (p->nrows * (fh + pad) > vp.height)
+    {
+        pad = vp.height / p->nrows - fh;
+        if (pad < 2) pad = 2;
+    }
+    const int line = fh + pad;
     int x = (vp.width - block) / 2;
     int y = (vp.height - p->nrows * line) / 2;
     if (x < 0) x = 0;
@@ -578,11 +585,13 @@ void trimpod_message_page(const char *title, const char *const *rows, int nrows)
     trimpod_page_run(&p.base);
 }
 
-/* Controls: a static reference card for the four inputs. */
+/* Controls: a static reference card for the non-obvious inputs. */
 static const char *const controls_rows[] = {
     "B - Back/Cancel",
     "A - Play/Enter",
     "Hold A - Context Menus",
+    "L1/R1 - Seek 10s",
+    "L2/R2 - Chapter Skip",
     "Side Switch - Lock Buttons",
 };
 #define CONTROLS_NROWS ((int)(sizeof(controls_rows) / sizeof(controls_rows[0])))

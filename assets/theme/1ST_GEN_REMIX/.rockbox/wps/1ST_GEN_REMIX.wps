@@ -71,9 +71,9 @@
 # times line's top (210): 4px of air on each side.
 %Vl(npProgress,20,192,280,14,-)%Vf(-)%Vb(-)
 %pb(0,0,-,14,PBB,backdrop,PB)
-%Vl(npProgress,20,210,90,25,1)
+%Vl(npProgress,20,210,120,25,1)
 %al%pc
-%Vl(npProgress,235,210,65,25,1)
+%Vl(npProgress,180,210,120,25,1)
 %ar-%pr
 
 # Panel: VOLUME -- shown ~1s after a volume change (%mv).  Perceptual dial

@@ -45,6 +45,7 @@
 #include "misc.h"
 #include "audio.h"
 #include "metadata.h"
+#include "trimpod_m4b.h"
 #include "strnatcmp.h"
 #include "keyboard.h"
 
@@ -415,7 +416,8 @@ int ft_assemble_path(char *buf, size_t bufsz, const char* currdir, const char* f
 bool ft_play_from_context(struct tree_context* c, int sel)
 {
     /* A file tap plays that file and goes to Now Playing. Resume-where-you-
-     * left-off is the Resume Playback root entry, not folder browsing. */
+     * left-off is the Resume Playback root entry -- except m4b audiobooks,
+     * which always continue from their per-file saved position. */
 
     /* about to create a new current playlist... allow user to cancel */
     if (!warn_on_pl_erase())
@@ -425,15 +427,25 @@ bool ft_play_from_context(struct tree_context* c, int sel)
         return false;
 
     int start_index = ft_build_playlist(c, sel);
+
+    unsigned long resume_elapsed = 0, resume_offset = 0;
+    struct entry *file = tree_get_entry_at(c, sel);
+    if (file)
+    {
+        char buf[MAX_PATH];
+        ft_assemble_path(buf, sizeof(buf), c->currdir, file->name);
+        trimpod_m4b_resume_get(buf, &resume_elapsed, &resume_offset);
+    }
+
     /* Normal play is in file order -- shuffle is transient, not a persisted
        default (Shuffle Songs / Shuffle Playlist set it explicitly). */
     global_settings.playlist_shuffle = false;
-    playlist_start(start_index, 0, 0);
+    playlist_start(start_index, resume_elapsed, resume_offset);
 
     global_status.resume_index = start_index;
     global_status.resume_crc32 = playlist_get_filename_crc32(NULL, start_index);
-    global_status.resume_elapsed = 0;
-    global_status.resume_offset = 0;
+    global_status.resume_elapsed = resume_elapsed;
+    global_status.resume_offset = resume_offset;
     status_save(false);
     return true;
 }

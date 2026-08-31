@@ -31,6 +31,7 @@
 #include "codec_thread.h"
 #include "metadata.h"
 #include "cuesheet.h"
+#include "trimpod_m4b.h"
 #include "buffering.h"
 #include "playlist.h"
 #include "abrepeat.h"
@@ -1112,6 +1113,12 @@ static void audio_playlist_track_finish(void)
     struct mp3entry *ply_id3 = id3_get(PLAYING_ID3);
     struct mp3entry *id3 = valid_mp3entry(ply_id3);
 
+    /* Trimpod: on natural playlist end the global resume info is reset (the
+       NULL below), but the m4b store must still see the final position so a
+       book that plays to the end clears its saved position. */
+    if (filling == STATE_ENDED)
+        trimpod_m4b_resume_note(id3);
+
     playlist_update_resume_info(filling == STATE_ENDED ? NULL : id3);
     if (id3)
     {
@@ -1464,7 +1471,12 @@ static bool audio_load_cuesheet(struct track_info *infop,
         int hid = ERR_UNSUPPORTED_TYPE;
         struct cuesheet_file cue_file;
 
-        if (look_for_cuesheet_file(track_id3, &cue_file))
+        bool have_cue_file = look_for_cuesheet_file(track_id3, &cue_file);
+        /* Trimpod: no sidecar .cue -- m4b audiobooks get their embedded
+           chapters extracted into the same cuesheet machinery. */
+        bool try_m4b = !have_cue_file && trimpod_is_m4b(track_id3->path);
+
+        if (have_cue_file || try_m4b)
         {
             hid = bufalloc(NULL, sizeof (struct cuesheet), TYPE_CUESHEET);
 
@@ -1473,7 +1485,11 @@ static bool audio_load_cuesheet(struct track_info *infop,
                 void *cuesheet = NULL;
                 bufgetdata(hid, sizeof (struct cuesheet), &cuesheet);
 
-                if (parse_cuesheet(&cue_file, (struct cuesheet *)cuesheet))
+                bool parsed = have_cue_file
+                    ? parse_cuesheet(&cue_file, (struct cuesheet *)cuesheet)
+                    : trimpod_m4b_load_chapters(track_id3->path,
+                                                (struct cuesheet *)cuesheet);
+                if (parsed)
                 {
                     /* Indicate cuesheet is present (while track remains
                        buffered) */
