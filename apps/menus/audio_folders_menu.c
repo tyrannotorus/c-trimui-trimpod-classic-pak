@@ -25,8 +25,6 @@
 #include "lang.h"
 #include "settings.h"        /* ID2P */
 #include "menu.h"
-#include "splash.h"
-#include "kernel.h"              /* HZ */
 #include "trimpod_folders.h"
 #include "trimpod_library.h"     /* trimpod_library_reconcile (Rescan) */
 #include "exported_menus.h"
@@ -38,13 +36,11 @@ MENUITEM_FUNCTION(tp_af_podcast, MENU_SHOW_CHEVRON, ID2P(LANG_TRIMPOD_PODCAST_FO
 MENUITEM_FUNCTION(tp_af_audiobook, MENU_SHOW_CHEVRON, ID2P(LANG_TRIMPOD_AUDIOBOOK_FOLDERS),
                   trimpod_audiobook_settings, NULL, Icon_NOICON);
 
-/* Rescan Library: rebuild the SQLite tag index from the source folders. Blocks
- * with a splash during the scan, then reports the track count. */
+/* Rescan Library: rebuild the SQLite tag index from the source folders, behind
+ * the reconcile's own Scanning screen. */
 static int trimpod_library_rescan(void)
 {
-    splash(0, ID2P(LANG_TRIMPOD_RESCAN));           /* held during the blocking scan */
-    int n = trimpod_library_reconcile(true);
-    splashf(HZ, "%s: %d", str(LANG_TRIMPOD_RESCAN), n);
+    trimpod_library_reconcile(true);
     return 0;
 }
 MENUITEM_FUNCTION(tp_af_rescan, 0, ID2P(LANG_TRIMPOD_RESCAN),

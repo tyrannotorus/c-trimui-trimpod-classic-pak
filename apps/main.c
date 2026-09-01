@@ -163,7 +163,8 @@ int main(void)
     global_status.last_volume_change = 0;
     validate_start_directory_init();
     /* Build/refresh the SQLite library index (stat-gated: a blink when nothing
-     * changed) so Shuffle Songs and the library browse are ready. */
+     * changed; shows "Scanning Library NN%" while parsing new files) so
+     * Shuffle Songs and the library browse are ready. */
     trimpod_library_init();
     /* no calls INIT_ATTR functions after this point anymore!
      * see definition of INIT_ATTR in config.h */

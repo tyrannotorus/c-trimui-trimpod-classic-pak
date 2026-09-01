@@ -404,9 +404,6 @@ static const int lib_allowed[] =
 int trimpod_library_browse(void *param)
 {
     enum trimpod_library_mode mode = (enum trimpod_library_mode)(intptr_t)param;
-    /* Reflect source-folder edits made since launch (stat-gated -> a blink when
-     * nothing changed); the init reconcile already ran at startup. */
-    trimpod_library_reconcile(false);
 
     struct lib_page p =
     {
