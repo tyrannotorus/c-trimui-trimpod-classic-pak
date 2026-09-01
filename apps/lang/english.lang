@@ -11867,6 +11867,20 @@
   </voice>
 </phrase>
 <phrase>
+  id: LANG_TRIMPOD_SCANNING
+  desc: Trimpod screen held while the library index parses files; code appends the percent done
+  user: core
+  <source>
+    *: "Scanning Library"
+  </source>
+  <dest>
+    *: "Scanning Library"
+  </dest>
+  <voice>
+    *: "Scanning Library"
+  </voice>
+</phrase>
+<phrase>
   id: LANG_TRIMPOD_UNKNOWN_ARTIST
   desc: Trimpod Library label for tracks with no artist tag
   user: core

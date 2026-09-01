@@ -13,8 +13,11 @@
  * readdir/dir_get_info (whose mtime is also os_stat-derived, so the two agree),
  * and file opens for tagging use Rockbox open() so the fd matches get_metadata().
  *
- * Single-threaded: reconcile runs synchronously at init and on manual rescan;
- * there is no background writer, so the journal mode is TRUNCATE (no WAL). */
+ * Single-threaded: reconcile runs synchronously at init, on a source-folder
+ * add/remove, and on manual rescan; there is no background writer, so the
+ * journal mode is TRUNCATE (no WAL).  The parse loop yields per file so
+ * playback keeps running.  The db is worked on in tmpfs and written back to
+ * the card after changes (see "tmpfs working copy"). */
 
 #include "config.h"
 
@@ -35,11 +38,59 @@
 #include "metadata.h"  /* get_metadata, struct mp3entry */
 #include "playlist.h"
 #include "settings.h"  /* TRIMPOD_MAX_FILES_IN_PLAYLIST */
+#include "lang.h"      /* str, LANG_TRIMPOD_SCANNING */
+#include "kernel.h"    /* yield */
+#include "backlight.h" /* backlight_on */
 #include "trimpod_folders.h"
+#include "trimpod_ui.h" /* trimpod_fullscreen_message */
 
 #define SCHEMA_VERSION 3
 
 static sqlite3 *db;
+
+/* "Scanning Library NN%" held over the synchronous scan.  Hidden until the walk
+ * finds work (a forced rescan shows it up front): 0% from then, the percent
+ * parsed through pass 2, 100% through commit + write-back.  Centered on the
+ * widest form so the number grows in place. */
+#define SCAN_HIDDEN (-1)
+static int scan_shown = SCAN_HIDDEN;   /* percent on screen, or hidden */
+
+static void scan_show(int pct)
+{
+    if (pct == scan_shown) return;
+    char widest[64], msg[64];
+    snprintf(widest, sizeof widest, "%s 100%%", str(LANG_TRIMPOD_SCANNING));
+    snprintf(msg, sizeof msg, "%s %d%%", str(LANG_TRIMPOD_SCANNING), pct);
+    trimpod_fullscreen_message(msg, widest);
+    backlight_on();
+    scan_shown = pct;
+}
+
+/* Files the walk found needing a parse.  Parsing is the slow part (~50 ms per
+ * file on the card), so it's deferred to a second pass over this list, which
+ * also gives the percent its total. */
+struct pend_item { char *path; int root_id, category; time_t mtime; off_t size; };
+static struct { struct pend_item *v; int n, cap; } pend;
+
+static void pend_add(const char *path, int root_id, int category,
+                     time_t mtime, off_t size)
+{
+    if (pend.n == pend.cap)
+    {
+        int ncap = pend.cap ? pend.cap * 2 : 64;
+        struct pend_item *nv = realloc(pend.v, ncap * sizeof *nv);
+        if (!nv) return;                 /* best effort: drop this entry, keep prior */
+        pend.v = nv; pend.cap = ncap;
+    }
+    char *dup = strdup(path);
+    if (dup)
+        pend.v[pend.n++] = (struct pend_item){ dup, root_id, category, mtime, size };
+}
+static void pend_free(void)
+{
+    for (int i = 0; i < pend.n; i++) free(pend.v[i].path);
+    free(pend.v); pend.v = NULL; pend.n = pend.cap = 0;
+}
 
 /* ---- schema ----------------------------------------------------------- */
 
@@ -333,10 +384,11 @@ static int scan_dir(struct scan_stmts *s, const char *path, const char *parent,
         else if ((filetype_get_attr(e->d_name) & FILE_ATTR_MASK) == FILE_ATTR_AUDIO)
         {
             ps_add(&seen_files, child);
-            if (!track_unchanged(s->track_sel, child, info.mtime, info.size) &&
-                parse_and_upsert(s->track_ins, child, path, root_id, category,
-                                 info.mtime, info.size))
-                touched++;
+            if (!track_unchanged(s->track_sel, child, info.mtime, info.size))
+            {
+                scan_show(0);                /* first real work: show the screen */
+                pend_add(child, root_id, category, info.mtime, info.size);
+            }
         }
     }
     closedir(d);
@@ -394,7 +446,7 @@ static void sync_roots(void)
             sqlite3_stmt *st;
             if (sqlite3_prepare_v2(db,
                     "INSERT INTO roots(path,category) VALUES(?1,?2)"
-                    " ON CONFLICT(path) DO UPDATE SET category=?2;",
+                    " ON CONFLICT(path) DO UPDATE SET category=?2 WHERE category!=?2;",
                     -1, &st, NULL) == SQLITE_OK)
             {
                 sqlite3_bind_text(st, 1, p, -1, SQLITE_STATIC);
@@ -429,17 +481,60 @@ static void sync_roots(void)
     ps_free(&gone);
 }
 
+/* ---- tmpfs working copy ------------------------------------------------ *
+ * The card is a `sync` vfat mount: every 4 KB page SQLite writes costs ~18 ms,
+ * and a library change dirties most pages twice (journal + db), so committing
+ * there took ~15 s.  The index is worked on in tmpfs instead and copied back
+ * to the card in one sequential pass after a reconcile that changed it. */
+#define DB_SD    ROCKBOX_DIR "/library.db"
+#define DB_RAM   "/tmp/trimpod-library.db"
+#define COPY_BUF (256 * 1024)
+
+static bool db_in_ram;
+
+static bool copy_file(const char *src, const char *dst)
+{
+    bool ok = false;
+    int in = open(src, O_RDONLY);
+    if (in < 0) return false;
+    int out = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    char *buf = malloc(COPY_BUF);
+    if (out >= 0 && buf)
+    {
+        ssize_t n;
+        while ((n = read(in, buf, COPY_BUF)) > 0)
+            if (write(out, buf, n) != n) break;
+        ok = n == 0;
+    }
+    free(buf);
+    if (out >= 0) close(out);
+    close(in);
+    return ok;
+}
+
+/* tmp + rename: a kill mid-write leaves the card's old copy intact. */
+static void db_writeback(void)
+{
+    if (db_in_ram && copy_file(DB_RAM, DB_SD ".new"))
+        rename(DB_SD ".new", DB_SD);
+}
+
 /* ---- public API ------------------------------------------------------- */
 
 int trimpod_library_reconcile(bool force_full)
 {
     if (!db) return 0;
     trimpod_folders_load_all();
+    scan_shown = SCAN_HIDDEN;
+    if (force_full) scan_show(0);            /* a full walk is always worth showing */
     db_exec("BEGIN;");
+    int changes_before = sqlite3_total_changes(db);
     sync_roots();
     int touched = 0;
     struct scan_stmts s;
     if (scan_stmts_open(&s))
+    {
+        /* Pass 1: stat-gated walk -- prune, upsert dirs, collect files to parse. */
         for (int c = 0; c < TP_CAT_COUNT; c++)
             for (int i = 0, n = trimpod_folders_root_count(c); i < n; i++)
             {
@@ -447,8 +542,28 @@ int trimpod_library_reconcile(bool force_full)
                 int id = root_id_for(r);
                 if (id > 0) touched += scan_dir(&s, r, NULL, id, c, force_full);
             }
+        /* Pass 2: parse them, with the percent; yield so the codec keeps up. */
+        for (int i = 0; i < pend.n; i++)
+        {
+            scan_show(i * 100 / pend.n);
+            yield();
+            struct pend_item *it = &pend.v[i];
+            char dir[MAX_PATH];
+            const char *sl = strrchr(it->path, '/');
+            snprintf(dir, sizeof dir, "%.*s", (int)(sl ? sl - it->path : 0), it->path);
+            if (parse_and_upsert(s.track_ins, it->path, dir, it->root_id,
+                                 it->category, it->mtime, it->size))
+                touched++;
+        }
+    }
+    /* Hold the screen through commit + write-back (seconds on the card); a pure
+     * removal has shown nothing yet. */
+    bool changed = sqlite3_total_changes(db) != changes_before;
+    if (changed) scan_show(100);
+    pend_free();
     scan_stmts_close(&s);
     db_exec("COMMIT;");
+    if (changed) db_writeback();
     return touched;
 }
 
@@ -650,8 +765,11 @@ static bool db_setup(void)
 
 void trimpod_library_init(void)
 {
-    char dbpath[MAX_PATH];
-    snprintf(dbpath, sizeof dbpath, "%s/library.db", ROCKBOX_DIR);
+    /* Work on a tmpfs copy of the card's index (see db_writeback); fall back to
+     * the card itself if the copy can't be made. */
+    remove(DB_RAM);                          /* never inherit a stale copy */
+    db_in_ram = copy_file(DB_SD, DB_RAM) || !file_exists(DB_SD);
+    const char *dbpath = db_in_ram ? DB_RAM : DB_SD;
 
     if (sqlite3_open(dbpath, &db) != SQLITE_OK || !db_setup())
     {
@@ -659,6 +777,7 @@ void trimpod_library_init(void)
         if (db) sqlite3_close(db);
         db = NULL;
         remove(dbpath);
+        if (db_in_ram) remove(DB_SD);
         if (sqlite3_open(dbpath, &db) != SQLITE_OK || !db_setup())
         {
             if (db) { sqlite3_close(db); db = NULL; }
@@ -671,4 +790,5 @@ void trimpod_library_init(void)
 void trimpod_library_close(void)
 {
     if (db) { sqlite3_close(db); db = NULL; }
+    if (db_in_ram) remove(DB_RAM);
 }

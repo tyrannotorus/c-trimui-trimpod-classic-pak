@@ -25,6 +25,12 @@ void        trimpod_header_refresh(void);
 void trimpod_centered_message(const char *question, const char *detail,
                               const char *footer);
 
+/* One line centered on the full screen (themed background, no header, no box),
+ * presented immediately -- for blocking work that has no page.  `widest`
+ * (NULL = msg) is msg's longest form; centering on it keeps the line from
+ * shifting as msg changes. */
+void trimpod_fullscreen_message(const char *msg, const char *widest);
+
 /* Centered yes/no confirmation drawn inside the content viewport (a Page, not a
  * popup).  The button choices "Cancel (B) / OK (A)" are drawn in the page body.
  *   question : the prompt, e.g. "Remove this folder?"

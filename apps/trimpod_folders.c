@@ -158,6 +158,13 @@ static void folders_load(struct folder_category *cat)
     }
 }
 
+/* Persist the list and reconcile the index now, under the Scanning screen. */
+static void folders_changed(struct folder_category *cat)
+{
+    folders_save(cat);
+    trimpod_library_reconcile(false);
+}
+
 static bool folders_add(struct folder_category *cat, const char *path)
 {
     if (cat->n_folders >= MAX_FOLDERS)
@@ -166,7 +173,7 @@ static bool folders_add(struct folder_category *cat, const char *path)
         if (strcmp(cat->folders[i], path) == 0)
             return false; /* already present */
     strlcpy(cat->folders[cat->n_folders++], path, FPATH_LEN);
-    folders_save(cat);
+    folders_changed(cat);
     return true;
 }
 
@@ -177,7 +184,7 @@ static void folders_remove(struct folder_category *cat, int idx)
     for (int i = idx; i < cat->n_folders - 1; i++)
         strlcpy(cat->folders[i], cat->folders[i + 1], FPATH_LEN);
     cat->n_folders--;
-    folders_save(cat);
+    folders_changed(cat);
 }
 
 /* ---- library access (trimpod_library.c) ------------------------------- */
@@ -867,10 +874,8 @@ int trimpod_shuffle_all(void *param)
     if (!warn_on_pl_erase())
         return GO_TO_ROOT;
 
-    /* Reflect any source-folder edits since launch (stat-gated -> a blink when
-     * nothing changed), then build the shuffle set from the index -- a query +
-     * batched insert, not a recursive filesystem walk. */
-    trimpod_library_reconcile(false);
+    /* Build the shuffle set from the index -- a query + batched insert, not a
+     * recursive filesystem walk. */
     if (trimpod_library_build_playlist(TP_CAT_MUSIC, NULL, NULL) <= 0)
     {
         splash(HZ, ID2P(LANG_TRIMPOD_NO_MUSIC));

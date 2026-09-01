@@ -113,6 +113,27 @@ void trimpod_centered_message(const char *question, const char *detail,
     }
 }
 
+void trimpod_fullscreen_message(const char *msg, const char *widest)
+{
+    if (!widest)
+        widest = msg;
+    FOR_NB_SCREENS(i)
+    {
+        struct screen *s = &screens[i];
+        struct viewport vp = {0};   /* buffer must be NULL: init_viewport derefs it */
+        int w = 0, h = 0;
+
+        viewport_set_fullscreen(&vp, s->screen_type);
+        s->set_viewport(&vp);
+        s->clear_viewport();
+        s->getstringsize((const unsigned char *)widest, &w, &h);
+        s->putsxy((vp.width - w) / 2, (vp.height - h) / 2,
+                  (const unsigned char *)msg);
+        s->update_viewport();
+        s->set_viewport(NULL);
+    }
+}
+
 /* The confirm page, derived from trimpod_page.  The run loop owns the legend,
  * header refresh, key whitelist and input loop; this page only describes its
  * legend, how to draw, and how to react to A/B. */
@@ -259,7 +280,7 @@ struct about_line { const char *text; enum about_kind kind; };
 
 static const struct about_line about_lines[] = {
     { "Trimpod Classic",     AB_TITLE },
-    { "v1.0.8",              AB_SUB   },
+    { "v1.0.9",              AB_SUB   },
     { NULL,                  AB_GAP   },
     { "MADE BY",             AB_CAP   },
     { "Werewolf Camp",       AB_NAME  },

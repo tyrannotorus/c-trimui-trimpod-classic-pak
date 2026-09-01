@@ -15,9 +15,10 @@
 void trimpod_library_init(void);
 void trimpod_library_close(void);
 
-/* Stat-gated incremental reconcile.  force_full re-reads every directory
- * (manual "Rescan Library", for in-place retags that don't bump dir mtimes).
- * Returns the number of track rows inserted/updated/deleted. */
+/* Stat-gated incremental reconcile: at startup and whenever a source folder is
+ * added or removed.  force_full re-reads every directory (manual "Rescan
+ * Library", for in-place retags that don't bump dir mtimes).  Returns the
+ * number of track rows inserted/updated/deleted. */
 int  trimpod_library_reconcile(bool force_full);
 
 /* Replace the current playlist with the query result; returns tracks inserted.
