@@ -57,7 +57,6 @@ int trimpod_settings_page(void);   /* main_menu.c */
 
 #include "tree.h"
 #include "wps.h"
-#include "bookmark.h"
 #include "playlist.h"
 #include "playlist_viewer.h"
 #include "playlist_catalog.h"

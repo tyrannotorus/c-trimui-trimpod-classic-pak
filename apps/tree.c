@@ -44,7 +44,6 @@
 #include "lang.h"
 #include "screens.h"
 #include "keyboard.h"
-#include "bookmark.h"
 #include "onplay.h"
 #include "core_alloc.h"
 #include "power.h"

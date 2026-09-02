@@ -26,11 +26,20 @@ bool trimpod_playlists_take_pending_view(char *path, size_t len);
  * catalog_insert_into() -- a directory is expanded into its tracks. */
 void trimpod_playlists_pick(const char *sel, int sel_attr);
 
-/* Shared Hold-A "Add to Playlist" gesture used by every music browser: show the
- * context submenu for `title`, then on confirm add the selection to a chosen /
- * new playlist.  Two forms -- a single file/dir path, or an explicit set of
- * track paths (a library album/artist has no single path to expand). */
-void trimpod_add_to_playlist(const char *title, const char *path, int attr);
-void trimpod_add_to_playlist_tracks(const char *title, char **paths, int count);
+/* Hold-A music context menu: Play / Add to Playlist / Add to Play Queue.
+ * The adds are handled here; returns true when the caller should play the
+ * selection.  The tracks form takes a path set (a library artist/album has no
+ * single path to expand). */
+bool trimpod_music_context(const char *title, const char *path, int attr);
+bool trimpod_music_context_tracks(const char *title, char **paths, int count);
+
+/* Append a track or directory (recursive) to the live queue; `replace`
+ * confirms and starts a new queue from it instead.  Returns true when the
+ * queue started playing from this call. */
+bool trimpod_queue_add(const char *path, int attr, bool replace);
+
+/* Start the current playlist at `index`, file order, with the same resume
+ * bookkeeping a browser tap does. */
+void trimpod_queue_start(int index);
 
 #endif /* _TRIMPOD_PLAYLISTS_H */

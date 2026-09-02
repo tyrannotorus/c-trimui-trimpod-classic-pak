@@ -40,7 +40,6 @@
 #include "playlist.h"
 #include "icons.h"
 #include "lang.h"
-#include "bookmark.h"
 #include "misc.h"
 #include "sound.h"
 #include "onplay.h"
@@ -462,16 +461,13 @@ static void gwps_enter_wps(bool theme_enabled)
     send_event(GUI_EVENT_ACTIONUPDATE, (void*)1);
 }
 
-static long do_wps_exit(long action, bool bookmark)
+static long do_wps_exit(void)
 {
     audio_pause();
     update_non_static();
-    if (bookmark)
-        bookmark_autobookmark(true);
     audio_stop();
 
     gwps_leave_wps(true);
-    (void)action;
     /* GO_TO_PREVIOUS, like the ACTION_WPS_BROWSE exit: _BROWSER resolves a
      * stale last_browser (default 0 = filetree) and lands in the file browser. */
     return GO_TO_PREVIOUS;
@@ -499,7 +495,6 @@ struct wps_page
     long result;          /* GO_TO_* handed back to the root dispatch */
     bool restore;         /* (re-)enter the WPS theme on the next draw */
     bool exit;            /* leave via do_wps_exit() */
-    bool bookmark;        /* autobookmark on exit */
     bool update;          /* force a non-static skin update on the next draw */
     bool theme_enabled;   /* pass-through to gwps_enter_wps() */
 };
@@ -811,24 +806,7 @@ static enum trimpod_page_result wps_page_on_action(struct trimpod_page *p,
 
                 /* stop and exit wps */
             case ACTION_WPS_STOP:
-                w->bookmark = true;
                 w->exit = true;
-                break;
-
-            case ACTION_WPS_LIST_BOOKMARKS:
-                gwps_leave_wps(true);
-                if (bookmark_load_menu() == BOOKMARK_USB_CONNECTED)
-                {
-                    w->result = GO_TO_ROOT;
-                    return TRIMPOD_PAGE_DONE;
-                }
-                w->restore = true;
-                break;
-
-            case ACTION_WPS_CREATE_BOOKMARK:
-                gwps_leave_wps(true);
-                bookmark_create_menu();
-                w->restore = true;
                 break;
 
              /* this case is used by the softlock feature
@@ -880,10 +858,10 @@ static enum trimpod_page_result wps_page_on_action(struct trimpod_page *p,
         }
 
     /* ACTION_WPS_STOP, or audio stopped on its own: leave via do_wps_exit so
-       the bookmark/pause/stop bookkeeping runs exactly as it always did. */
+       the pause/stop bookkeeping runs exactly as it always did. */
     if (w->exit)
     {
-        w->result = do_wps_exit(w->button, w->bookmark);
+        w->result = do_wps_exit();
         return TRIMPOD_PAGE_DONE;
     }
     return TRIMPOD_PAGE_STAY;

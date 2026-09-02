@@ -43,7 +43,6 @@
 #include "debug.h"
 #include "playlist_catalog.h"
 #include "playlist_viewer.h"
-#include "bookmark.h"
 #include "root_menu.h"
 #include "general.h"
 
@@ -205,34 +204,25 @@ restart:
             reopen_last_playlist = false;
         }
 
-        if (view) /* display playlist contents or resume bookmark */
+        if (view) /* display playlist contents */
         {
-
-            int res = bookmark_autoload(selected_playlist);
-            if (res == BOOKMARK_DO_RESUME)
-               result = 0;
-            else if (res == BOOKMARK_CANCEL)
-                goto restart;
-            else
-            {
-                switch (playlist_viewer_ex(selected_playlist, &most_recent_selection)) {
-                    case PLAYLIST_VIEWER_OK:
-                    {
-                        reopen_last_playlist = true;
-                        result = 0;
-                        break;
-                    }
-                    case PLAYLIST_VIEWER_CANCEL:
-                    {
-                        goto restart;
-                    }
-                    case PLAYLIST_VIEWER_USB:
-                    case PLAYLIST_VIEWER_MAINMENU:
-                    /* Fall through */
-                    default:
-                        reopen_last_playlist = true;
-                        break;
+            switch (playlist_viewer_ex(selected_playlist, &most_recent_selection)) {
+                case PLAYLIST_VIEWER_OK:
+                {
+                    reopen_last_playlist = true;
+                    result = 0;
+                    break;
                 }
+                case PLAYLIST_VIEWER_CANCEL:
+                {
+                    goto restart;
+                }
+                case PLAYLIST_VIEWER_USB:
+                case PLAYLIST_VIEWER_MAINMENU:
+                /* Fall through */
+                default:
+                    reopen_last_playlist = true;
+                    break;
             }
         }
         else /* we're just adding something to a playlist */

@@ -1693,6 +1693,30 @@ static struct buflib_callbacks ops = {
 /* ************************************************************************** */
 /******************************************************************************/
 /******************************************************************************/
+/* Trimpod: mirror the control journal between the card and its tmpfs working
+ * copy (see PLAYLIST_CONTROL_FILE in rbpaths.h).  A missing source deletes the
+ * destination, so an emptied queue stays empty across the copy. */
+static void control_copy(const char *src, const char *dst)
+{
+    int in = open(src, O_RDONLY);
+    if (in < 0)
+    {
+        remove(dst);
+        return;
+    }
+    int out = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (out >= 0)
+    {
+        char buf[8192];
+        ssize_t n;
+        while ((n = read(in, buf, sizeof(buf))) > 0)
+            if (write(out, buf, n) != n)
+                break;
+        close(out);
+    }
+    close(in);
+}
+
 /*
  * Initialize playlist entries at startup
  */
@@ -1708,6 +1732,9 @@ void playlist_init(void)
 
     strmemccpy(on_disk_playlist.control_filename, PLAYLIST_CONTROL_FILE ".tmp",
                sizeof(on_disk_playlist.control_filename));
+
+    /* Bring last shutdown's journal into the tmpfs working copy for resume. */
+    control_copy(PLAYLIST_CONTROL_PERSIST, PLAYLIST_CONTROL_FILE);
 
     current_playlist.fd = -1;
     on_disk_playlist.fd = -1;
@@ -1738,6 +1765,9 @@ void playlist_shutdown(void)
         pl_close_control(playlist);
 
     playlist_write_unlock(playlist);
+
+    /* Persist the journal to the card. */
+    control_copy(PLAYLIST_CONTROL_FILE, PLAYLIST_CONTROL_PERSIST);
 }
 
 /* returns number of tracks in playlist (includes queued/inserted tracks) */

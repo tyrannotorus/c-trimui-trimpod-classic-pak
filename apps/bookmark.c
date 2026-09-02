@@ -54,20 +54,11 @@
 #define MAX_BOOKMARK_SIZE  350
 #define RECENT_BOOKMARK_FILE ROCKBOX_DIR "/most-recent.bmark"
 
-/* Trimpod: silent resume is the fixed, unchangeable behavior (iPod-classic) --
- * the Bookmark settings were removed.  bookmark_autoload()/bookmark_autobookmark()
- * are hardcoded to always load/create. These cover the remaining read sites:
- * the most-recent-bookmark list is off (BM_USEMRB; plain int so the now-constant
- * comparisons don't trip -Wenum-compare). */
+/* Trimpod: the Bookmark settings were removed and nothing auto-creates or
+ * auto-loads bookmarks any more.  The most-recent-bookmark list is off
+ * (BM_USEMRB; plain int so the now-constant comparisons don't trip
+ * -Wenum-compare). */
 #define BM_USEMRB      0
-#define BOOKMARK_IGNORE "/bookmark.ignore"
-#define BOOKMARK_UNIGNORE "/bookmark.unignore"
-
-/* flags for write_bookmark() */
-#define BMARK_WRITE        0x0
-#define BMARK_ASK_USER     0x1
-#define BMARK_CREATE_FILE  0x2
-#define BMARK_CHECK_IGNORE 0x4
 
 /* Used to buffer bookmarks while displaying the bookmark list. */
 struct bookmark_list
@@ -525,41 +516,6 @@ static void get_track_resume_info(struct resume_info *resume_info)
 }
 
 /* ----------------------------------------------------------------------- */
-/* This function checks for bookmark ignore and unignore files to allow    */
-/* directories to be ignored or included in bookmarks */
-/* ----------------------------------------------------------------------- */
-static bool bookmark_has_ignore(struct resume_info *resume_info)
-{
-    if (!resume_info->id3)
-        return false;
-
-    char *buf = global_temp_buffer;
-    size_t bufsz = sizeof(global_temp_buffer);
-
-    strmemccpy(buf, resume_info->id3->path, bufsz);
-
-    char *slash;
-    while ((slash = strrchr(buf, '/')))
-    {
-        size_t rem = bufsz - (slash - buf);
-        if (strmemccpy(slash, BOOKMARK_UNIGNORE, rem) != NULL && file_exists(buf))
-        {
-            /* unignore exists we want bookmarks */
-            logf("unignore bookmark found %s\n", buf);
-            return false;
-        }
-        if (strmemccpy(slash, BOOKMARK_IGNORE, rem) != NULL && file_exists(buf))
-        {
-            /* ignore exists we do not want bookmarks */
-            logf("ignore bookmark found %s\n", buf);
-            return true;
-        }
-        *slash = '\0';
-    }
-    return false;
-}
-
-/* ----------------------------------------------------------------------- */
 /* This function takes the current current resume information and writes   */
 /* that to the beginning of the bookmark file.                             */
 /* This file will contain N number of bookmarks in the following format:   */
@@ -570,15 +526,11 @@ static bool bookmark_has_ignore(struct resume_info *resume_info)
 /* possible that a bookmark is successfully added to the most recent       */
 /* bookmark list but fails to be added to the bookmark file or vice versa. */
 /* ------------------------------------------------------------------------*/
-static bool write_bookmark(unsigned int flags)
+static bool write_bookmark(void)
 {
-    logf("%s flags: %d", __func__, flags);
+    logf("%s", __func__);
     char bm_filename[MAX_PATH];
     bool ret=true;
-
-    bool create_bookmark_file = flags & BMARK_CREATE_FILE;
-    bool check_ignore = flags & BMARK_CHECK_IGNORE;
-    bool ask_user = flags & BMARK_ASK_USER;
     bool usemrb = BM_USEMRB;
 
     char *name = NULL;
@@ -590,23 +542,6 @@ static bool write_bookmark(unsigned int flags)
     {
         get_track_resume_info(&resume_info);
 
-        if (check_ignore
-            && (create_bookmark_file || ask_user || usemrb))
-        {
-            if (bookmark_has_ignore(&resume_info))
-                return false;
-        }
-
-        if (ask_user)
-        {
-            if (yesno_pop(ID2P(LANG_AUTO_BOOKMARK_QUERY)))
-            {
-                create_bookmark_file = true;
-            }
-            else
-                return false;
-        }
-
         /* writing the most recent bookmark */
         if (usemrb)
         {
@@ -616,25 +551,21 @@ static bool write_bookmark(unsigned int flags)
         }
 
         /* writing the directory bookmark */
-        if (create_bookmark_file)
+        bm = create_bookmark(&name, &namelen, &resume_info);
+        if (generate_bookmark_file_name(bm_filename,
+                                        sizeof(bm_filename), name, namelen))
         {
-            bm = create_bookmark(&name, &namelen, &resume_info);
-            if (generate_bookmark_file_name(bm_filename,
-                                            sizeof(bm_filename), name, namelen))
-            {
-                ret &= add_bookmark(bm_filename, bm, false);
-            }
-            else
-            {
-                ret = false; /* generating bookmark file failed */
-            }
+            ret &= add_bookmark(bm_filename, bm, false);
+        }
+        else
+        {
+            ret = false; /* generating bookmark file failed */
         }
     }
     else
         ret = false;
 
-    /* Trimpod: bookmarking is silent (resume is automatic, not user-facing) --
-     * no "Bookmark Created" splash, including during the shutdown auto-save. */
+    /* Trimpod: no "Bookmark Created" splash. */
     return ret;
 }
 
@@ -1051,7 +982,7 @@ bool bookmark_create_menu(void)
     if (!bookmark_is_bookmarkable_state())
         save_playlist_screen(NULL);
 
-    return write_bookmark(BMARK_CREATE_FILE);
+    return write_bookmark();
 }
 /* ----------------------------------------------------------------------- */
 /* This function acts as the load interface from the context menu.         */
@@ -1095,88 +1026,21 @@ int bookmark_load_menu(void)
 }
 
 /* ----------------------------------------------------------------------- */
-/* This function handles an autobookmark creation.  This is an interface   */
-/* function.                                                               */
-/* Returns true on successful bookmark creation.                           */
-/* ----------------------------------------------------------------------- */
-bool bookmark_autobookmark(bool prompt_ok)
-{
-    logf("%s", __func__);
-
-    if (!bookmark_is_bookmarkable_state())
-        return false;
-
-    audio_pause();    /* first pause playback */
-    (void)prompt_ok;
-    /* Trimpod: silent resume -- always create/update the directory bookmark on
-     * stop so playback resumes next time, no prompt. */
-    return write_bookmark(BMARK_CREATE_FILE | BMARK_CHECK_IGNORE);
-}
-
-/* ----------------------------------------------------------------------- */
-/* This function will determine if an autoload is necessary.  This is an   */
-/* interface function.                                                     */
-/* Returns                                                                 */
-/* BOOKMARK_DO_RESUME    on bookmark load or bookmark selection.           */
-/* BOOKMARK_DONT_RESUME  if we're not going to resume                      */
-/* BOOKMARK_CANCEL       if user canceled                                  */
-/* ------------------------------------------------------------------------*/
-int bookmark_autoload(const char* file)
-{
-    logf("%s", __func__);
-    char bm_filename[MAX_PATH];
-
-    /* Trimpod: silent resume -- always auto-load the directory bookmark if one
-     * exists, never prompt. */
-    if(!generate_bookmark_file_name(bm_filename, sizeof(bm_filename), file, -1))
-        return BOOKMARK_DONT_RESUME;
-
-    if(!file_exists(bm_filename))
-        return BOOKMARK_DONT_RESUME;
-
-    return (bookmark_load(bm_filename, true)
-            ? BOOKMARK_DO_RESUME : BOOKMARK_DONT_RESUME);
-}
-
-/* ----------------------------------------------------------------------- */
 /* This function loads the bookmark information into the resume memory.    */
 /* This is an interface function.                                          */
 /* Returns true on successful bookmark load.                               */
 /* ------------------------------------------------------------------------*/
-bool bookmark_load(const char* file, bool autoload)
+bool bookmark_load(const char* file)
 {
     logf("%s", __func__);
-    int  fd;
     char* bookmark = NULL;
 
-    if(autoload)
-    {
-        fd = open(file, O_RDONLY);
-        if(fd >= 0)
-        {
-            if(read_line(fd, global_temp_buffer, sizeof(global_temp_buffer)) > 0)
-                bookmark=global_temp_buffer;
-            close(fd);
-        }
-    }
-    else
-    {
-        /* This is not an auto-load, so list the bookmarks */
-        select_bookmark(file, false, &bookmark);
-    }
+    select_bookmark(file, false, &bookmark);
 
-    if (bookmark != NULL)
+    if (bookmark != NULL && !play_bookmark(bookmark))
     {
-        if (!play_bookmark(bookmark))
-        {
-            /* Selected bookmark not found. */
-            if (!autoload)
-            {
-                splash(HZ*2, ID2P(LANG_NOTHING_TO_RESUME));
-            }
-
-            return false;
-        }
+        splash(HZ*2, ID2P(LANG_NOTHING_TO_RESUME));  /* selected bookmark not found */
+        return false;
     }
 
     return true;

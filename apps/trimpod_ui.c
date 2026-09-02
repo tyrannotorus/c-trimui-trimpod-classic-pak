@@ -280,7 +280,7 @@ struct about_line { const char *text; enum about_kind kind; };
 
 static const struct about_line about_lines[] = {
     { "Trimpod Classic",     AB_TITLE },
-    { "v1.0.9",              AB_SUB   },
+    { "v1.0.10",             AB_SUB   },
     { NULL,                  AB_GAP   },
     { "MADE BY",             AB_CAP   },
     { "Werewolf Camp",       AB_NAME  },

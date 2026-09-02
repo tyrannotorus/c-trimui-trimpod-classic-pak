@@ -36,6 +36,7 @@
 #include "playlist.h"          /* playlist_load/get_track_info/delete/save (Edit) */
 #include "filetypes.h"         /* FILE_ATTR_AUDIO (track-set inserts) */
 #include "kernel.h"            /* current_tick (shuffle seed) */
+#include "system.h"            /* ARRAYLEN */
 #include "scratch_buf.h"       /* scratch_buffer_get -- playlist_load buffers */
 #include "trimpod_page.h"
 #include "trimpod_transition.h"  /* arm the back slide on the B-exit only */
@@ -366,11 +367,124 @@ static void edit_playlist(int sel)
     playlist_close(p.pl);
 }
 
+/* ---- the live play queue -------------------------------------------------
+ * Appends go onto the current playlist; when there is none (or `replace` is
+ * set) the selection becomes the queue and starts playing.  Inserts are silent
+ * (progress=false): the user stays on the current screen, so the "Inserted N"
+ * modal would just flash over it. */
+struct queue_op { struct playlist_insert_context ctx; bool fresh; };
+
+/* The saved queue is only loaded into RAM by Resume Playback, so until then
+ * playlist_amount() is 0 although a queue exists; judge by the resume point. */
+static bool queue_exists(void)
+{
+    return playlist_amount() > 0 || global_status.resume_index != -1;
+}
+
+void trimpod_queue_start(int index)
+{
+    global_settings.playlist_shuffle = false;      /* normal play: file order */
+    playlist_start(index, 0, 0);
+    global_status.resume_index = index;
+    global_status.resume_crc32 = playlist_get_filename_crc32(NULL, index);
+    global_status.resume_elapsed = 0;
+    global_status.resume_offset = 0;
+    status_save(false);
+}
+
+/* False when declined or the control file is unavailable: nothing to close. */
+static bool queue_open(struct queue_op *q, bool replace)
+{
+    memset(q, 0, sizeof *q);
+    if (replace && !warn_on_pl_erase())
+        return false;
+    q->fresh = replace || !queue_exists();
+    if (!q->fresh && playlist_amount() <= 0 && playlist_resume() == -1)
+        q->fresh = true;                           /* unloadable: start over */
+    if (q->fresh && playlist_create(NULL, NULL) == -1)
+        return false;
+    if (playlist_insert_context_create(playlist_get_current(), &q->ctx,
+                                       PLAYLIST_INSERT_LAST, false, false) < 0)
+    {
+        playlist_insert_context_release(&q->ctx);  /* a failed create still locks */
+        return false;
+    }
+    return true;
+}
+
+/* A queue built from nothing starts playing; returns whether it did. */
+static bool queue_close(struct queue_op *q)
+{
+    playlist_insert_context_release(&q->ctx);
+    if (!q->fresh || playlist_amount() <= 0)
+        return false;
+    trimpod_queue_start(0);
+    return true;
+}
+
+/* tracksearch callback: the first audio file ends the walk */
+static int first_audio_cb(char *name, void *found)
+{
+    (void)name;
+    *(bool *)found = true;
+    return -1;
+}
+
+bool trimpod_queue_add(const char *path, int attr, bool replace)
+{
+    struct queue_op q;
+    if ((attr & ATTR_DIRECTORY) && (replace || !queue_exists()))
+    {
+        /* About to build a queue from it: a folder with no audio anywhere
+         * under it is a no-op, not a new empty queue. */
+        bool found = false;
+        playlist_directory_tracksearch(path, true, first_audio_cb, &found);
+        if (!found)
+        {
+            if (replace)
+                splash(HZ, ID2P(LANG_TRIMPOD_NO_MUSIC));
+            return false;
+        }
+    }
+    if (!queue_open(&q, replace))
+        return false;
+    if (attr & ATTR_DIRECTORY)
+        playlist_insert_directory(NULL, path, PLAYLIST_INSERT_LAST, false, true,
+                                  &q.ctx);
+    else
+        playlist_insert_context_add(&q.ctx, path);
+    return queue_close(&q);
+}
+
+static void queue_add_tracks(char **paths, int count)
+{
+    struct queue_op q;
+    if (!queue_open(&q, false))
+        return;
+    for (int i = 0; i < count; i++)
+    {
+        yield();                                   /* keep the codec fed */
+        if (playlist_insert_context_add(&q.ctx, paths[i]) < 0)
+            break;
+    }
+    queue_close(&q);
+}
+
+static void queue_add_playlist(const char *path)
+{
+    struct queue_op q;
+    if (!queue_open(&q, false))
+        return;
+    playlist_entries_iterate(path, &q.ctx, NULL);
+    queue_close(&q);
+}
+
 /* The per-playlist Hold-A context menu, titled with the playlist's name.
  * trimpod_context_menu returns the row index or -1 on cancel. */
-enum { PL_ACT_PLAY = 0, PL_ACT_SHUFFLE, PL_ACT_RENAME, PL_ACT_EDIT, PL_ACT_DELETE };
+enum { PL_ACT_PLAY = 0, PL_ACT_SHUFFLE, PL_ACT_QUEUE,
+       PL_ACT_RENAME, PL_ACT_EDIT, PL_ACT_DELETE };
 static const char *const playlist_action_opts[] =
-    { "Play", "Shuffle", "Rename", "Edit", "Delete" };
+    { "Play", "Shuffle", "Add to Play Queue", "Rename", "Edit", "Delete" };
 
 /* Open the context menu for playlist `sel`; returns TRIMPOD_PAGE_DONE when a
  * chosen action leaves the page (play -> Now Playing), else STAY. */
@@ -380,7 +494,8 @@ static enum trimpod_page_result playlist_action(struct playlists_page *p, int se
     path_append(path, pl_dir, pl_namebuf + pl_off[sel], sizeof(path));
     pl_display_name(sel, name, sizeof(name));
 
-    int act = trimpod_context_menu(name, playlist_action_opts, 5);
+    int act = trimpod_context_menu(name, playlist_action_opts,
+                                   ARRAYLEN(playlist_action_opts));
     switch (act)
     {
         case PL_ACT_PLAY:
@@ -399,6 +514,9 @@ static enum trimpod_page_result playlist_action(struct playlists_page *p, int se
             p->result = GO_TO_PLAYLIST_VIEWER;
             return TRIMPOD_PAGE_DONE;
         }
+        case PL_ACT_QUEUE:
+            queue_add_playlist(path);           /* the saved file is never edited */
+            break;
         case PL_ACT_RENAME:
         {
             /* Pre-fill the keyboard with the current name, then rename the
@@ -665,22 +783,34 @@ static void trimpod_playlists_pick_tracks(char **paths, int count)
     run_playlists(&p, "Add to Playlist");
 }
 
-/* ---- shared Hold-A "Add to Playlist" entry points ------------------------
- * The one gesture every music browser routes through: show the context submenu
- * for `title`, and on confirm add the selection.  One flow, so a page only has
- * to resolve its highlighted row to a path (or a set of track paths). */
-static const char *const add_to_pl_opts[] = { "Add to Playlist" };
+/* ---- shared Hold-A music context menu ------------------------------------
+ * Play / Add to Playlist / Add to Play Queue for the highlighted row.  The adds
+ * are handled here; Play is returned to the caller, which owns how its rows
+ * start. */
+enum { MUSIC_CTX_PLAY = 0, MUSIC_CTX_ADD_PL, MUSIC_CTX_ADD_QUEUE };
+static const char *const music_ctx_opts[] =
+    { "Play", "Add to Playlist", "Add to Play Queue" };
 
-void trimpod_add_to_playlist(const char *title, const char *path, int attr)
+bool trimpod_music_context(const char *title, const char *path, int attr)
 {
-    if (trimpod_context_menu(title, add_to_pl_opts, 1) == 0)
-        trimpod_playlists_pick(path, attr);
+    switch (trimpod_context_menu(title, music_ctx_opts, ARRAYLEN(music_ctx_opts)))
+    {
+        case MUSIC_CTX_PLAY:      return true;
+        case MUSIC_CTX_ADD_PL:    trimpod_playlists_pick(path, attr); break;
+        case MUSIC_CTX_ADD_QUEUE: trimpod_queue_add(path, attr, false); break;
+    }
+    return false;
 }
 
-void trimpod_add_to_playlist_tracks(const char *title, char **paths, int count)
+bool trimpod_music_context_tracks(const char *title, char **paths, int count)
 {
     if (count <= 0)
-        return;
-    if (trimpod_context_menu(title, add_to_pl_opts, 1) == 0)
-        trimpod_playlists_pick_tracks(paths, count);
+        return false;
+    switch (trimpod_context_menu(title, music_ctx_opts, ARRAYLEN(music_ctx_opts)))
+    {
+        case MUSIC_CTX_PLAY:      return true;
+        case MUSIC_CTX_ADD_PL:    trimpod_playlists_pick_tracks(paths, count); break;
+        case MUSIC_CTX_ADD_QUEUE: queue_add_tracks(paths, count); break;
+    }
+    return false;
 }

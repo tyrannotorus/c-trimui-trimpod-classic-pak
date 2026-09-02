@@ -482,15 +482,27 @@ static enum trimpod_page_result picker_on_action(struct trimpod_page *self,
             }
             return TRIMPOD_PAGE_STAY;
 
-        case ACTION_STD_CONTEXT:     /* Hold A: add-to-playlist (music) / pick folder */
+        case ACTION_STD_CONTEXT:     /* Hold A: music context menu / pick folder */
             if (p->music)
             {
                 if (have_sel)
                 {
                     char path[FPATH_LEN];
                     path_append(path, p->curdir, item_name(p, sel), sizeof(path));
-                    trimpod_add_to_playlist(item_name(p, sel), path,
-                        item_isdir(p, sel) ? ATTR_DIRECTORY : FILE_ATTR_AUDIO);
+                    bool isdir = item_isdir(p, sel);
+                    if (trimpod_music_context(item_name(p, sel), path,
+                                              isdir ? ATTR_DIRECTORY : FILE_ATTR_AUDIO))
+                    {
+                        /* Play: a track exactly as tapping it; a folder plays
+                         * everything under it (recursive) as the new queue. */
+                        browse_save_pos(p);
+                        if (isdir ? trimpod_queue_add(path, ATTR_DIRECTORY, true)
+                                  : ft_play_from_context(p->mctx, sel))
+                        {
+                            p->result = GO_TO_WPS;
+                            return TRIMPOD_PAGE_DONE;
+                        }
+                    }
                 }
                 return TRIMPOD_PAGE_STAY;
             }
@@ -542,7 +554,7 @@ static const struct trimpod_page_vtable picker_vtable =
     .on_action = picker_on_action,
 };
 
-/* A (descend/play), B (up/leave), Hold-A (music: add-to-playlist / picker: add folder) */
+/* A (descend/play), B (up/leave), Hold-A (music: context menu / picker: add folder) */
 static const int picker_allowed[] =
     { ACTION_STD_OK, ACTION_STD_CANCEL, ACTION_STD_CONTEXT, -1 };
 
