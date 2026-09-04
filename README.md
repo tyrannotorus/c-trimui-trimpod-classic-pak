@@ -25,19 +25,10 @@ when forking. Here may be dragons.
 - **tg5040** — TrimUI Brick
 - I have no other devices to test with. Send me one! :)
 
-## Features
+## Install via Pak Store
+1. Trimpod is available via download through [NextUI's](https://github.com/LoveRetro/NextUI) [Pak Store](https://github.com/LoveRetro/nextui-pak-store).
 
-| Feature | Notes |
-|---|---|
-| **Milkdrop / projectM visualizer** | Real-time, audio-reactive presets on a dedicated CPU core. A curated set ships; toggle them from Settings. |
-| **1st-gen iPod interface** | Chicago typography, chevron menus, page-slide transitions, and a Now Playing screen with scrolling track info. |
-| **Audio spectrum** | A live spectrum on the Now Playing screen. |
-| **iPod volume bar** | The volume rocker works from any screen; a momentary iPod-style bar shows the level. |
-| **Folder-based music** | Browse your own source folders rather than a fixed library (default `/mnt/SDCARD/Music`; add more in Settings). |
-| **Audiobooks (.m4b)** | Every book resumes exactly where you left off, and L2/R2 skip between its chapters (default `/mnt/SDCARD/Audiobooks`; add folders in Settings). |
-| **Colour themes** | Several iPod colour palettes (Settings → Power → Color). |
-
-## Install
+## Install manually
 
 1. Download `Trimpod.pak.zip` from the [latest release](https://github.com/tyrannotorus/c-trimui-trimpod-classic-pak/releases).
 2. Copy it to `/mnt/SDCARD/Tools/tg5040/` (mount the SD card or `adb push`).
@@ -67,28 +58,6 @@ adb shell "rm -rf \"$PAK\"" && adb push dist/Trimpod.pak "$PAK"
 `./build.sh clean` forces a fresh reconfigure. A full pak deploy resets on-device settings — the live
 config (`trimpod/config.cfg`) is bind-mounted from inside the pak, so replacing it restores defaults.
 For code-only changes, push just the rebuilt binary (`trimpod/trimpod`) instead of the whole pak.
-
-### Architecture
-
-Trimpod Classic is a custom Rockbox **SDL-application target** (`retro-handheld`) that renders at a
-logical 320×240 and is hardware-upscaled 3.2× to the Brick's 1024×768 display. It runs hosted under
-NextUI rather than on bare metal: `launch.sh` sources per-device sysfs paths, bind-mounts the pak's
-data dir to `/tmp/trimpod`, applies the CPU governor, and runs the binary — then tears all of that
-down on exit. Input is read natively through SDL like NextUI: the gamepad and volume rocker come in
-as SDL joystick events and the power key as an SDL keyboard scancode (no gptokeyb2 shim).
-
-### Layout
-
-| Path | Role |
-|---|---|
-| `build.sh`, `package.sh` | build, then assemble the pak |
-| `Dockerfile.trimpod` | the toolchain image (NextUI tg5040 + `zip` + an `sdl2-config` shim) |
-| `pak/` | the pak skeleton: `launch.sh`, `config.cfg`, `.sys` files (`pak.json` lives at the repo root) |
-| `assets/` | product assets — the theme, ChicagoFLF fonts, icons, Milkdrop presets, the skin build |
-| `apps/`, `firmware/`, `lib/`, `tools/` | the Rockbox source tree + the Trimpod target |
-
-> clangd flags missing `config.h` / undeclared identifiers in this tree — they resolve only inside
-> the Docker build, which is the source of truth.
 
 ## License
 
