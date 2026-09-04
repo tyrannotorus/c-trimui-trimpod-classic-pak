@@ -59,12 +59,10 @@ adb shell "rm -rf \"$PAK\"" && adb push dist/Trimpod.pak "$PAK"
 config (`trimpod/config.cfg`) is bind-mounted from inside the pak, so replacing it restores defaults.
 For code-only changes, push just the rebuilt binary (`trimpod/trimpod`) instead of the whole pak.
 
-## License
+## License and Credits
 
 Trimpod Classic is an independent build of [Rockbox](https://github.com/Rockbox/rockbox) and is
 licensed under the **GNU General Public License v2.0**.
-
-### Credits
 
 - **Rockbox** — the firmware this is built from. GPLv2.
 - **projectM** — the Milkdrop-compatible visualizer engine ([projectM-visualizer/projectm](https://github.com/projectM-visualizer/projectm)). LGPL 2.1.
