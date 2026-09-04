@@ -15,10 +15,10 @@ liability for any damage to your device when it melts from awesomeness.
 
 ## Dev Disclaimer
 
-While I am a 10+ year industry veteran, note this project has been human-directed as far as top-down
-architecture, but 100% slop-coded at the ground floor. I've done my best to ensure professional standards,
-but I make not guarantee of the line-by-line quality like I would my own work. Thus is the warning, so
-beware when forking. Here may be dragons.
+While I am a 10+ year industry veteran, note this project has been human-directed as far as architecture,
+but 100% slop-coded. I've done my best to ensure professional standards from a high-level, but make no
+guarantee of "thoughtfully-engineered work line by line" at a low-level. Thus is the warning, so beware
+when forking. Here may be dragons.
 
 ## Supported Platforms
 
