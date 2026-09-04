@@ -371,9 +371,10 @@ static void edit_playlist(int sel)
 
 /* ---- the live play queue -------------------------------------------------
  * Tracks go into the current playlist at `position`: PLAYLIST_INSERT (Play
- * Next: after the current track, successive adds in order), PLAYLIST_INSERT_LAST
- * (Add to Play Queue: the end) or PLAYLIST_REPLACE (a new queue).  With no
- * queue the selection becomes one and starts playing.  Inserts are silent
+ * Next: after the current track, successive picks in order while that track
+ * stays current), PLAYLIST_INSERT_LAST (Add to Play Queue: the end) or
+ * PLAYLIST_REPLACE (a new queue).  With no queue the selection becomes one
+ * and starts playing.  Inserts are silent
  * (progress=false): the user stays on the current screen, so the "Inserted N"
  * modal would just flash over it. */
 struct queue_op { struct playlist_insert_context ctx; bool fresh; int pos; };
@@ -408,6 +409,17 @@ static bool queue_open(struct queue_op *q, int position)
         q->fresh = true;                           /* unloadable: start over */
     if (q->fresh && playlist_create(NULL, NULL) == -1)
         return false;
+    /* Play Next: the engine chains PLAYLIST_INSERT after its last insert, a
+     * cursor that survives skips back and repeat wrap-around.  Chain only
+     * while the same track is current; otherwise start right after it. */
+    static int chain_track = -1;
+    if (position == PLAYLIST_INSERT)
+    {
+        int cur = q->fresh ? -1 : playlist_get_display_index();
+        if (cur != chain_track)
+            position = PLAYLIST_INSERT_FIRST;
+        chain_track = cur;
+    }
     q->pos = replace ? PLAYLIST_INSERT_LAST : position;   /* new queue: appends */
     if (playlist_insert_context_create(playlist_get_current(), &q->ctx,
                                        q->pos, false, false) < 0)

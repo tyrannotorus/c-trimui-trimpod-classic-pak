@@ -1215,17 +1215,18 @@ static int add_track_to_playlist_unlocked(struct playlist_info* playlist,
 
             playlist->last_insert_pos = position;
             break;
+        /* Trimpod: an append leaves the insert cursor alone, so a later
+         * PLAYLIST_INSERT still chains after the last inserted track (or the
+         * current one), never after the appended one. */
         case PLAYLIST_INSERT_LAST:
             if (playlist->first_index <= 0)
             {
                 position = insert_position = playlist->amount;
-                playlist->last_insert_pos = position;
                 break;
             }
             /* fallthrough */
         case PLAYLIST_INSERT_LAST_ROTATED:
             position = insert_position = playlist->first_index;
-            playlist->last_insert_pos = position;
             break;
         case PLAYLIST_INSERT_SHUFFLED:
         {

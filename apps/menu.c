@@ -444,8 +444,6 @@ int do_menu(const struct menu_item_ex *start_menu, int *start_selected,
          * its own inline hook -- it restores the skin around it). */
         if (action == ACTION_NONE && trimpod_visualizer_maybe_autostart())
             redraw_lists = true;
-        if (action == ACTION_NONE && trimpod_idle_to_wps())
-            continue;   /* the loop-top home check exits */
 
         int new_action = menu_callback(action, menu, &lists);
         if (new_action == ACTION_EXIT_AFTER_THIS_MENUITEM)
@@ -492,6 +490,14 @@ int do_menu(const struct menu_item_ex *start_menu, int *start_selected,
 
         if (LIKELY(gui_synclist_do_button(&lists, &action)))
             continue;
+        /* Idle return to Now Playing.  Only after do_button: it disarms the
+         * list's redraw callback, which list_do_action_timeout armed with a
+         * pointer to `lists` on this stack frame. */
+        else if (action == ACTION_NONE && trimpod_idle_to_wps())
+        {
+            ret = GO_TO_ROOT;
+            done = true;
+        }
         else if (action == ACTION_TP_HOME)   /* hold BACK: jump to the Main Menu */
         {
             /* already at the Main Menu -> nothing to jump to, so do nothing */
