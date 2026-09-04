@@ -543,9 +543,8 @@ static void wps_page_draw(struct trimpod_page *p)
                  * presents -- the peak-meter loop owns presents) and only tokens
                  * whose value changed actually repaint, so this is cheap.  Do
                  * not gate this on "changed" -- that freezes the %mv swap.
-                 * Never pre-check skin_do_full_update() here: it consumes the
-                 * pending-full flag skin_update() needs to take its atomic
-                 * clear->body->SBS->present path. */
+                 * skin_update() promotes to a full render itself when one is
+                 * pending, atomically: clear, body, SBS, one present. */
                 skin_update(WPS, i, SKIN_REFRESH_NON_STATIC);
             }
         }
