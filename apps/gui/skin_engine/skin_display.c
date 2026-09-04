@@ -93,7 +93,9 @@ void skin_update(enum skinnable_screens skin, enum screen_type screen,
     if (cuesheet_update)
         skin_request_full_update(skin);
 
-    bool full = skin_do_full_update(skin, screen);
+    /* an explicit SKIN_REFRESH_ALL is a full render too: atomic path below */
+    bool full = skin_do_full_update(skin, screen)
+                || update_type == SKIN_REFRESH_ALL;
 
     if (skin == WPS && full)
     {

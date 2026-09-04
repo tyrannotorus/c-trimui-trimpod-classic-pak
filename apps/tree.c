@@ -551,6 +551,8 @@ static int dirbrowse(void)
         oldbutton = button;
         gui_synclist_do_button(&tree_lists, &button);
         tc.selected_item = gui_synclist_get_sel_pos(&tree_lists);
+        if (button == ACTION_NONE)
+            trimpod_idle_to_wps();          /* the loop-top home check exits */
         int customaction = ONPLAY_NO_CUSTOMACTION;
         bool do_restore_display = true;
         switch ( button ) {

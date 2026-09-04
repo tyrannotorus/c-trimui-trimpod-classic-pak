@@ -17,11 +17,12 @@
 #include "button-target.h"   /* retrohh_hold_switch() */
 #include "trimpod_page.h"
 #include "trimpod_ui.h"      /* trimpod_centered_message() */
+#include "lang.h"            /* str() */
 
 static void hold_draw(struct trimpod_page *self)
 {
     (void)self;
-    trimpod_centered_message("Flip the side switch off", "HOLD is ON", NULL);
+    trimpod_centered_message(str(LANG_TRIMPOD_HOLD_HINT), str(LANG_TRIMPOD_HOLD_ON), NULL);
 }
 
 /* Input is muted while held, so poll the switch quickly (not the HZ the loop

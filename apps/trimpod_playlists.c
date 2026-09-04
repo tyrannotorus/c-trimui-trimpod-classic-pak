@@ -34,6 +34,8 @@
 #include "root_menu.h"
 #include "playlist_catalog.h"
 #include "playlist.h"          /* playlist_load/get_track_info/delete/save (Edit) */
+#include "audio.h"             /* trimpod_resume_if_current */
+#include "metadata.h"
 #include "filetypes.h"         /* FILE_ATTR_AUDIO (track-set inserts) */
 #include "kernel.h"            /* current_tick (shuffle seed) */
 #include "system.h"            /* ARRAYLEN */
@@ -181,7 +183,7 @@ static const char *pl_get_name(int sel, void *data, char *buf, size_t buf_len)
 {
     (void)data;
     if (sel == pl_count)
-        return "+ Add Playlist";
+        return str(LANG_TRIMPOD_ADD_PLAYLIST_ROW);
     if (sel < 0 || sel > pl_count)
         return "";
     pl_display_name(sel, buf, buf_len);   /* no extension shown */
@@ -214,14 +216,14 @@ static void add_playlist(struct playlists_page *p)
     char path[MAX_PATH];
     snprintf(path, sizeof(path), "%s/%s.m3u8", pl_dir, name);
 
-    if (file_exists(path) && !trimpod_confirm("Overwrite playlist?", name))
+    if (file_exists(path) && !trimpod_confirm(str(LANG_TRIMPOD_OVERWRITE_PLAYLIST_Q), name))
         return;
 
     int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd >= 0)
         close(fd);
     else
-        splashf(HZ, "Could not create playlist");
+        splash(HZ, ID2P(LANG_TRIMPOD_PLAYLIST_CREATE_FAILED));
     pl_load();
     gui_synclist_set_nb_items(&p->lists, pl_count + 1);
 }
@@ -289,9 +291,9 @@ static enum trimpod_page_result editor_on_action(struct trimpod_page *self, int 
     {
         char name[MAX_PATH];
         editor_track_name(p, sel, name, sizeof(name));
-        static const char *const opts[] = { "Remove from Playlist" };
+        static const char *const opts[] = { ID2P(LANG_TRIMPOD_REMOVE_FROM_PLAYLIST) };
         if (trimpod_context_menu(name, opts, 1) == 0 &&
-            trimpod_confirm("Remove from playlist?", name) &&
+            trimpod_confirm(str(LANG_TRIMPOD_REMOVE_FROM_PLAYLIST_Q), name) &&
             playlist_delete(p->pl, sel) == 0)
         {
             p->dirty = true;
@@ -322,7 +324,7 @@ static void edit_playlist(int sel)
     char *buf = scratch_buffer_get(&bufsz);
     if (!buf || bufsz < 8192)
     {
-        splashf(HZ, "Cannot edit playlist");
+        splash(HZ, ID2P(LANG_TRIMPOD_PLAYLIST_EDIT_FAILED));
         return;
     }
 
@@ -338,7 +340,7 @@ static void edit_playlist(int sel)
                          buf, index_sz, buf + index_sz, (int)(bufsz - index_sz));
     if (!p.pl)
     {
-        splashf(HZ, "Cannot load playlist");
+        splash(HZ, ID2P(LANG_TRIMPOD_PLAYLIST_LOAD_FAILED));
         return;
     }
 
@@ -368,11 +370,13 @@ static void edit_playlist(int sel)
 }
 
 /* ---- the live play queue -------------------------------------------------
- * Appends go onto the current playlist; when there is none (or `replace` is
- * set) the selection becomes the queue and starts playing.  Inserts are silent
+ * Tracks go into the current playlist at `position`: PLAYLIST_INSERT (Play
+ * Next: after the current track, successive adds in order), PLAYLIST_INSERT_LAST
+ * (Add to Play Queue: the end) or PLAYLIST_REPLACE (a new queue).  With no
+ * queue the selection becomes one and starts playing.  Inserts are silent
  * (progress=false): the user stays on the current screen, so the "Inserted N"
  * modal would just flash over it. */
-struct queue_op { struct playlist_insert_context ctx; bool fresh; };
+struct queue_op { struct playlist_insert_context ctx; bool fresh; int pos; };
 
 /* The saved queue is only loaded into RAM by Resume Playback, so until then
  * playlist_amount() is 0 although a queue exists; judge by the resume point. */
@@ -381,21 +385,22 @@ static bool queue_exists(void)
     return playlist_amount() > 0 || global_status.resume_index != -1;
 }
 
-void trimpod_queue_start(int index)
+bool trimpod_resume_if_current(const char *path)
 {
-    global_settings.playlist_shuffle = false;      /* normal play: file order */
-    playlist_start(index, 0, 0);
-    global_status.resume_index = index;
-    global_status.resume_crc32 = playlist_get_filename_crc32(NULL, index);
-    global_status.resume_elapsed = 0;
-    global_status.resume_offset = 0;
-    status_save(false);
+    int status = audio_status();
+    struct mp3entry *id3 = audio_current_track();
+    if (!(status & AUDIO_STATUS_PLAY) || !id3 || strcmp(id3->path, path) != 0)
+        return false;
+    if (status & AUDIO_STATUS_PAUSE)
+        audio_resume();
+    return true;
 }
 
 /* False when declined or the control file is unavailable: nothing to close. */
-static bool queue_open(struct queue_op *q, bool replace)
+static bool queue_open(struct queue_op *q, int position)
 {
     memset(q, 0, sizeof *q);
+    bool replace = position == PLAYLIST_REPLACE;
     if (replace && !warn_on_pl_erase())
         return false;
     q->fresh = replace || !queue_exists();
@@ -403,8 +408,9 @@ static bool queue_open(struct queue_op *q, bool replace)
         q->fresh = true;                           /* unloadable: start over */
     if (q->fresh && playlist_create(NULL, NULL) == -1)
         return false;
+    q->pos = replace ? PLAYLIST_INSERT_LAST : position;   /* new queue: appends */
     if (playlist_insert_context_create(playlist_get_current(), &q->ctx,
-                                       PLAYLIST_INSERT_LAST, false, false) < 0)
+                                       q->pos, false, false) < 0)
     {
         playlist_insert_context_release(&q->ctx);  /* a failed create still locks */
         return false;
@@ -418,7 +424,8 @@ static bool queue_close(struct queue_op *q)
     playlist_insert_context_release(&q->ctx);
     if (!q->fresh || playlist_amount() <= 0)
         return false;
-    trimpod_queue_start(0);
+    global_settings.playlist_shuffle = false;      /* a new queue: file order */
+    playlist_start(0, 0, 0);
     return true;
 }
 
@@ -430,9 +437,10 @@ static int first_audio_cb(char *name, void *found)
     return -1;
 }
 
-bool trimpod_queue_add(const char *path, int attr, bool replace)
+bool trimpod_queue_add(const char *path, int attr, int position)
 {
     struct queue_op q;
+    bool replace = position == PLAYLIST_REPLACE;
     if ((attr & ATTR_DIRECTORY) && (replace || !queue_exists()))
     {
         /* About to build a queue from it: a folder with no audio anywhere
@@ -446,20 +454,19 @@ bool trimpod_queue_add(const char *path, int attr, bool replace)
             return false;
         }
     }
-    if (!queue_open(&q, replace))
+    if (!queue_open(&q, position))
         return false;
     if (attr & ATTR_DIRECTORY)
-        playlist_insert_directory(NULL, path, PLAYLIST_INSERT_LAST, false, true,
-                                  &q.ctx);
+        playlist_insert_directory(NULL, path, q.pos, false, true, &q.ctx);
     else
         playlist_insert_context_add(&q.ctx, path);
     return queue_close(&q);
 }
 
-static void queue_add_tracks(char **paths, int count)
+static void queue_add_tracks(char **paths, int count, int position)
 {
     struct queue_op q;
-    if (!queue_open(&q, false))
+    if (!queue_open(&q, position))
         return;
     for (int i = 0; i < count; i++)
     {
@@ -484,7 +491,8 @@ static void queue_add_playlist(const char *path)
 enum { PL_ACT_PLAY = 0, PL_ACT_SHUFFLE, PL_ACT_QUEUE,
        PL_ACT_RENAME, PL_ACT_EDIT, PL_ACT_DELETE };
 static const char *const playlist_action_opts[] =
-    { "Play", "Shuffle", "Add to Play Queue", "Rename", "Edit", "Delete" };
+    { ID2P(LANG_PLAY), ID2P(LANG_SHUFFLE), ID2P(LANG_TRIMPOD_ADD_TO_PLAY_QUEUE),
+      ID2P(LANG_RENAME), ID2P(LANG_EDIT), ID2P(LANG_DELETE) };
 
 /* Open the context menu for playlist `sel`; returns TRIMPOD_PAGE_DONE when a
  * chosen action leaves the page (play -> Now Playing), else STAY. */
@@ -528,14 +536,14 @@ static enum trimpod_page_result playlist_action(struct playlists_page *p, int se
                 if (strcmp(newpath, path) == 0)
                     break;                              /* unchanged */
                 if (file_exists(newpath))
-                    splashf(HZ, "Name already exists");
+                    splash(HZ, ID2P(LANG_TRIMPOD_NAME_EXISTS));
                 else if (rename(path, newpath) == 0)
                 {
                     pl_load();
                     gui_synclist_set_nb_items(&p->lists, pl_count + 1);
                 }
                 else
-                    splashf(HZ, "Rename failed");
+                    splash(HZ, ID2P(LANG_TRIMPOD_RENAME_FAILED));
             }
             break;
         }
@@ -544,7 +552,7 @@ static enum trimpod_page_result playlist_action(struct playlists_page *p, int se
             break;
         case PL_ACT_DELETE:
         {
-            if (trimpod_confirm("Delete this playlist?", name))
+            if (trimpod_confirm(str(LANG_TRIMPOD_DELETE_PLAYLIST_Q), name))
             {
                 remove(path);
                 pl_load();
@@ -574,7 +582,7 @@ static enum trimpod_page_result pick_into_existing(struct playlists_page *p, int
             catalog_insert_into(path, false, p->pick_paths[i], FILE_ATTR_AUDIO);
     else
         catalog_insert_into(path, false, p->pick_sel, p->pick_attr);
-    splashf(HZ, "Added to playlist");
+    splash(HZ, ID2P(LANG_TRIMPOD_ADDED_TO_PLAYLIST));
     return TRIMPOD_PAGE_DONE;
 }
 
@@ -629,8 +637,9 @@ static enum trimpod_page_result playlists_on_action(struct trimpod_page *self,
                 char name[MAX_PATH];
                 pl_display_name(sel, name, sizeof(name));
                 static const char *const rows[] =
-                    { "Playlist is empty", "Hold A on any song",
-                      "to add it to a playlist" };
+                    { ID2P(LANG_TRIMPOD_PLAYLIST_EMPTY),
+                      ID2P(LANG_TRIMPOD_PLAYLIST_EMPTY_HINT1),
+                      ID2P(LANG_TRIMPOD_PLAYLIST_EMPTY_HINT2) };
                 trimpod_message_page(name, rows, 3);
                 return TRIMPOD_PAGE_STAY;
             }
@@ -725,7 +734,7 @@ int trimpod_playlists_start_pending(void)
 
     if (playlist_create(pl_dir, pl_pending_file) == -1 || playlist_amount() <= 0)
     {
-        splashf(HZ, "Playlist is empty");
+        splash(HZ, ID2P(LANG_TRIMPOD_PLAYLIST_EMPTY));
         return -1;
     }
     /* Reflect the chosen mode in the shuffle setting so Now Playing shows it
@@ -766,7 +775,7 @@ void trimpod_playlists_pick(const char *sel, int sel_attr)
         .result = GO_TO_ROOT,
         .pick = true, .pick_sel = sel, .pick_attr = sel_attr,
     };
-    run_playlists(&p, "Add to Playlist");
+    run_playlists(&p, str(LANG_TRIMPOD_ADD_TO_PLAYLIST));
 }
 
 /* Add an explicit set of track paths (a library album/artist, which has no
@@ -780,24 +789,27 @@ static void trimpod_playlists_pick_tracks(char **paths, int count)
         .result = GO_TO_ROOT,
         .pick = true, .pick_paths = paths, .pick_npaths = count,
     };
-    run_playlists(&p, "Add to Playlist");
+    run_playlists(&p, str(LANG_TRIMPOD_ADD_TO_PLAYLIST));
 }
 
 /* ---- shared Hold-A music context menu ------------------------------------
- * Play / Add to Playlist / Add to Play Queue for the highlighted row.  The adds
- * are handled here; Play is returned to the caller, which owns how its rows
- * start. */
-enum { MUSIC_CTX_PLAY = 0, MUSIC_CTX_ADD_PL, MUSIC_CTX_ADD_QUEUE };
+ * Play / Play Next / Add to Play Queue / Add to Playlist for the highlighted
+ * row.  The adds are handled here; Play is returned to the caller, which owns
+ * how its rows start. */
+enum { MUSIC_CTX_PLAY = 0, MUSIC_CTX_PLAY_NEXT, MUSIC_CTX_ADD_QUEUE,
+       MUSIC_CTX_ADD_PL };
 static const char *const music_ctx_opts[] =
-    { "Play", "Add to Playlist", "Add to Play Queue" };
+    { ID2P(LANG_PLAY), ID2P(LANG_PLAY_NEXT), ID2P(LANG_TRIMPOD_ADD_TO_PLAY_QUEUE),
+      ID2P(LANG_TRIMPOD_ADD_TO_PLAYLIST) };
 
 bool trimpod_music_context(const char *title, const char *path, int attr)
 {
     switch (trimpod_context_menu(title, music_ctx_opts, ARRAYLEN(music_ctx_opts)))
     {
         case MUSIC_CTX_PLAY:      return true;
+        case MUSIC_CTX_PLAY_NEXT: trimpod_queue_add(path, attr, PLAYLIST_INSERT); break;
+        case MUSIC_CTX_ADD_QUEUE: trimpod_queue_add(path, attr, PLAYLIST_INSERT_LAST); break;
         case MUSIC_CTX_ADD_PL:    trimpod_playlists_pick(path, attr); break;
-        case MUSIC_CTX_ADD_QUEUE: trimpod_queue_add(path, attr, false); break;
     }
     return false;
 }
@@ -809,8 +821,9 @@ bool trimpod_music_context_tracks(const char *title, char **paths, int count)
     switch (trimpod_context_menu(title, music_ctx_opts, ARRAYLEN(music_ctx_opts)))
     {
         case MUSIC_CTX_PLAY:      return true;
+        case MUSIC_CTX_PLAY_NEXT: queue_add_tracks(paths, count, PLAYLIST_INSERT); break;
+        case MUSIC_CTX_ADD_QUEUE: queue_add_tracks(paths, count, PLAYLIST_INSERT_LAST); break;
         case MUSIC_CTX_ADD_PL:    trimpod_playlists_pick_tracks(paths, count); break;
-        case MUSIC_CTX_ADD_QUEUE: queue_add_tracks(paths, count); break;
     }
     return false;
 }

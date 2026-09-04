@@ -53,6 +53,7 @@
 #include "trimpod_page.h"         /* trimpod_home_pending (hold-BACK -> root) */
 #include "trimpod_ui.h"           /* the Hold-A context menu */
 #include "trimpod_visualizer.h"   /* idle auto-start while music plays */
+#include "trimpod_playlists.h"    /* trimpod_resume_if_current */
 
 
 
@@ -627,7 +628,8 @@ static enum pv_context_result context_menu(int index)
 
     char name[MAX_PATH];
     format_name(name, current_track->name, sizeof(name));
-    static const char *const opts[] = { "Remove from Playlist", "Move" };
+    static const char *const opts[] =
+        { ID2P(LANG_TRIMPOD_REMOVE_FROM_PLAYLIST), ID2P(LANG_MOVE) };
     int sel = trimpod_context_menu(name, opts, 2);
     if (sel >= 0)
     {
@@ -937,10 +939,15 @@ enum playlist_viewer_result playlist_viewer_ex(const char* filename,
                 }
                 else if (!viewer.playlist)
                 {
-                    /* play new track */
-                    playlist_start(current_track->index, 0, 0);
+                    /* play new track; the one playing is left alone */
+                    if (current_track->index != viewer.current_playing_track)
+                        playlist_start(current_track->index, 0, 0);
+                    else if (audio_status() & AUDIO_STATUS_PAUSE)
+                        audio_resume();
                     update_playlist(false);
                 }
+                else if (trimpod_resume_if_current(current_track->name))
+                    goto exit;      /* already playing: just show it */
                 else if (warn_on_pl_erase())
                 {
                     /* Turn it into the current playlist */
@@ -1027,6 +1034,8 @@ enum playlist_viewer_result playlist_viewer_ex(const char* filename,
             case ACTION_NONE:   /* idle tick */
                 if (trimpod_visualizer_maybe_autostart())
                     gui_synclist_draw(&playlist_lists);
+                else
+                    trimpod_idle_to_wps();   /* the loop-top home check exits */
                 break;
             default:
                 if(default_event_handler(button) == SYS_USB_CONNECTED)

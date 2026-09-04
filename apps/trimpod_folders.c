@@ -434,7 +434,7 @@ static const char *picker_legend(struct trimpod_page *self)
      * folder-picker (Settings): A opens and B backs (universal), but Hold-A to add
      * is the one non-obvious gesture, so publicize just that. */
     return ((struct picker_page *)self)->music ? NULL
-                                               : "Hold A to add";
+                                               : str(LANG_TRIMPOD_HOLD_A_TO_ADD);
 }
 
 static void picker_draw(struct trimpod_page *self)
@@ -496,7 +496,7 @@ static enum trimpod_page_result picker_on_action(struct trimpod_page *self,
                         /* Play: a track exactly as tapping it; a folder plays
                          * everything under it (recursive) as the new queue. */
                         browse_save_pos(p);
-                        if (isdir ? trimpod_queue_add(path, ATTR_DIRECTORY, true)
+                        if (isdir ? trimpod_queue_add(path, ATTR_DIRECTORY, PLAYLIST_REPLACE)
                                   : ft_play_from_context(p->mctx, sel))
                         {
                             p->result = GO_TO_WPS;
@@ -571,7 +571,7 @@ static bool folder_pick(char *out, size_t out_len)
     strlcpy(p.curdir, p.root, sizeof(p.curdir));
 
     gui_synclist_init(&p.lists, pick_get_name, &p, false, 1, NULL);
-    gui_synclist_set_title(&p.lists, "Add Folder", Icon_file_view_menu);
+    gui_synclist_set_title(&p.lists, str(LANG_TRIMPOD_ADD_FOLDER), Icon_file_view_menu);
     pick_load(&p);
 
     push_current_activity(ACTIVITY_FILEBROWSER);
@@ -587,7 +587,7 @@ static const char *mgmt_get_name(int sel, void *data, char *buf, size_t buf_len)
 {
     struct folder_category *cat = data;
     if (sel == cat->n_folders)
-        return "+ Add Folder";
+        return str(LANG_TRIMPOD_ADD_FOLDER_ROW);
     snprintf(buf, buf_len, "%s", cat->folders[sel]);
     return buf;
 }
@@ -635,13 +635,13 @@ static enum trimpod_page_result folders_page_on_action(struct trimpod_page *self
             if (folder_pick(picked, sizeof(picked)))
             {
                 if (!folders_add(cat, picked))
-                    splashf(HZ, "Already added or list full");
+                    splash(HZ, ID2P(LANG_TRIMPOD_FOLDER_ADD_FAILED));
                 gui_synclist_set_nb_items(&p->lists, cat->n_folders + 1);
             }
         }
         else if (sel >= 0 && sel < cat->n_folders)   /* a folder row */
         {
-            if (trimpod_confirm("Remove this folder?", cat->folders[sel]))
+            if (trimpod_confirm(str(LANG_TRIMPOD_REMOVE_FOLDER_Q), cat->folders[sel]))
             {
                 folders_remove(cat, sel);
                 gui_synclist_set_nb_items(&p->lists, cat->n_folders + 1);

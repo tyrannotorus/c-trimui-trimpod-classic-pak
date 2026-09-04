@@ -542,10 +542,11 @@ static void wps_page_draw(struct trimpod_page *p)
                  * skin_update() only draws into the framebuffer (it never
                  * presents -- the peak-meter loop owns presents) and only tokens
                  * whose value changed actually repaint, so this is cheap.  Do
-                 * not gate this on "changed" -- that freezes the %mv swap. */
-                bool full_update = skin_do_full_update(WPS, i);
-                skin_update(WPS, i, full_update ?
-                             SKIN_REFRESH_ALL : SKIN_REFRESH_NON_STATIC);
+                 * not gate this on "changed" -- that freezes the %mv swap.
+                 * Never pre-check skin_do_full_update() here: it consumes the
+                 * pending-full flag skin_update() needs to take its atomic
+                 * clear->body->SBS->present path. */
+                skin_update(WPS, i, SKIN_REFRESH_NON_STATIC);
             }
         }
         w->update = false;
@@ -628,7 +629,7 @@ static const struct menu_value_cb np_sleep_value =
 static const char *np_pause_get(void *ctx, char *buf, int len)
 {
     (void)ctx; (void)buf; (void)len;
-    return (audio_status() & AUDIO_STATUS_PAUSE) ? "Play" : "Pause";
+    return (audio_status() & AUDIO_STATUS_PAUSE) ? str(LANG_PLAY) : str(LANG_PAUSE);
 }
 static void np_pause_cycle(void *ctx, int dir)
 {
@@ -640,9 +641,9 @@ static const struct menu_value_cb np_pause_value =
     { np_pause_get, np_pause_cycle, NULL };
 MENUITEM_VALUE(np_pause, "", &np_pause_value, Icon_NOICON);
 MENUITEM_VALUE(np_sleeptimer, ID2P(LANG_SLEEP_TIMER), &np_sleep_value, Icon_NOICON);
-MENUITEM_RETURNVALUE(np_addpl, "Add to Playlist", NP_ADD_TO_PLAYLIST,
+MENUITEM_RETURNVALUE(np_addpl, ID2P(LANG_TRIMPOD_ADD_TO_PLAYLIST), NP_ADD_TO_PLAYLIST,
                      NULL, Icon_NOICON);
-MENUITEM_RETURNVALUE(np_viz, "Start Visualizer", NP_START_VIZ, NULL, Icon_NOICON);
+MENUITEM_RETURNVALUE(np_viz, ID2P(LANG_TRIMPOD_START_VISUALIZER), NP_START_VIZ, NULL, Icon_NOICON);
 /* Shuffle/Repeat: inline setting rows (LEFT/RIGHT cycle, applied live to the
  * running playlist via their settings_list callbacks); auto-labelled. */
 MENUITEM_SETTING(np_shuffle, &global_settings.playlist_shuffle, NULL);

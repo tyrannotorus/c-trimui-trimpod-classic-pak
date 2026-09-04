@@ -444,6 +444,8 @@ int do_menu(const struct menu_item_ex *start_menu, int *start_selected,
          * its own inline hook -- it restores the skin around it). */
         if (action == ACTION_NONE && trimpod_visualizer_maybe_autostart())
             redraw_lists = true;
+        if (action == ACTION_NONE && trimpod_idle_to_wps())
+            continue;   /* the loop-top home check exits */
 
         int new_action = menu_callback(action, menu, &lists);
         if (new_action == ACTION_EXIT_AFTER_THIS_MENUITEM)

@@ -46,6 +46,7 @@
 #include "audio.h"
 #include "metadata.h"
 #include "trimpod_m4b.h"
+#include "trimpod_playlists.h"   /* trimpod_resume_if_current */
 #include "strnatcmp.h"
 #include "keyboard.h"
 
@@ -411,6 +412,14 @@ bool ft_play_from_context(struct tree_context* c, int sel)
     /* A file tap plays that file and goes to Now Playing. Resume-where-you-
      * left-off is the Resume Playback root entry -- except m4b audiobooks,
      * which always continue from their per-file saved position. */
+    char buf[MAX_PATH];
+    struct entry *file = tree_get_entry_at(c, sel);
+    if (file)
+        ft_assemble_path(buf, sizeof(buf), c->currdir, file->name);
+
+    /* the track already playing: show it, don't restart it */
+    if (file && trimpod_resume_if_current(buf))
+        return true;
 
     /* about to create a new current playlist... allow user to cancel */
     if (!warn_on_pl_erase())
@@ -422,24 +431,13 @@ bool ft_play_from_context(struct tree_context* c, int sel)
     int start_index = ft_build_playlist(c, sel);
 
     unsigned long resume_elapsed = 0, resume_offset = 0;
-    struct entry *file = tree_get_entry_at(c, sel);
     if (file)
-    {
-        char buf[MAX_PATH];
-        ft_assemble_path(buf, sizeof(buf), c->currdir, file->name);
         trimpod_m4b_resume_get(buf, &resume_elapsed, &resume_offset);
-    }
 
     /* Normal play is in file order -- shuffle is transient, not a persisted
        default (Shuffle Songs / Shuffle Playlist set it explicitly). */
     global_settings.playlist_shuffle = false;
     playlist_start(start_index, resume_elapsed, resume_offset);
-
-    global_status.resume_index = start_index;
-    global_status.resume_crc32 = playlist_get_filename_crc32(NULL, start_index);
-    global_status.resume_elapsed = resume_elapsed;
-    global_status.resume_offset = resume_offset;
-    status_save(false);
     return true;
 }
 
@@ -466,41 +464,19 @@ int ft_enter(struct tree_context* c)
     }
     else {
         bool play = false;
-        int start_index=0;
 
         switch ( file_attr & FILE_ATTR_MASK ) {
             case FILE_ATTR_M3U:
                 play = ft_play_playlist(c->currdir, file->name);
-
-                if (play)
-                {
-                    start_index = 0;
-                }
-
                 break;
 
             case FILE_ATTR_AUDIO:
-            {
-                /* If the highlighted file is the track already playing (e.g. the
-                 * user backed out of Now Playing and re-selected it), return to
-                 * the WPS instead of restarting it from the top.  Any other file
-                 * falls through and starts normally. */
-                if (audio_status())
-                {
-                    struct mp3entry *cur = audio_current_track();
-                    if (cur && cur->path[0] && !strcmp(cur->path, buf))
-                    {
-                        rc = GO_TO_WPS;
-                        break;
-                    }
-                }
-
-                /* ft_play_from_context does the bookmark/warn/build/shuffle/
-                 * start + resume bookkeeping and returns whether it started. */
+                /* starts it (or resumes the track already playing); true
+                 * when Now Playing should be shown */
                 if (ft_play_from_context(c, c->selected_item))
                     rc = GO_TO_WPS;
                 break;
-            }
+
             case FILE_ATTR_SBS:
                 ft_apply_skin_file(buf, global_settings.sbs_file);
                 break;
@@ -559,17 +535,8 @@ int ft_enter(struct tree_context* c)
                 break;
         }
 
-        if ( play ) {
-            /* the resume_index must always be the index in the
-               shuffled list in case shuffle is enabled */
-            global_status.resume_index = start_index;
-            global_status.resume_crc32 =
-                playlist_get_filename_crc32(NULL, start_index);
-            global_status.resume_elapsed = 0;
-            global_status.resume_offset = 0;
-            status_save(false);
+        if ( play )
             rc = GO_TO_WPS;
-        }
         else {
             if (*c->dirfilter > NUM_FILTER_MODES &&
                 *c->dirfilter != SHOW_CFG &&

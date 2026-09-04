@@ -641,6 +641,20 @@ void root_menu(void)
                 /* fall through */
             case GO_TO_ROOT:
                 global_status.last_screen = GO_TO_ROOT; /* We've returned to ROOT */
+                /* idle return to Now Playing: load the WPS forward from here (B
+                 * from it comes back); if the music stopped meanwhile, stay */
+                if (trimpod_wps_pending)
+                {
+                    trimpod_wps_pending = trimpod_home_pending = false;
+                    if (audio_status() & AUDIO_STATUS_PLAY)
+                    {
+                        trimpod_transition_take_back();   /* drop the unwound screens' back slide */
+                        pl_owns_viewer = false;
+                        last_screen = GO_TO_ROOT;
+                        next_screen = GO_TO_WPS;
+                        break;
+                    }
+                }
                 if (trimpod_home_pending)
                     trimpod_transition_arm_back();  /* home: one back-slide, as if
                                                      * the Main Menu were the prev

@@ -149,7 +149,8 @@ static void confirm_page_draw(struct trimpod_page *self)
 {
     struct confirm_page *p = (struct confirm_page *)self;
     /* the choices live in the page body, not a header legend */
-    trimpod_centered_message(p->question, p->detail, "Cancel (B)      OK (A)");
+    trimpod_centered_message(p->question, p->detail,
+                             str(LANG_TRIMPOD_CONFIRM_LEGEND));
 }
 
 static enum trimpod_page_result confirm_on_action(struct trimpod_page *self,
@@ -204,7 +205,7 @@ struct ctxmenu_page
 static const char *ctxmenu_get_name(int sel, void *data, char *buf, size_t len)
 {
     (void)buf; (void)len;
-    return ((struct ctxmenu_page *)data)->items[sel];
+    return P2STR((const unsigned char *)((struct ctxmenu_page *)data)->items[sel]);
 }
 
 static void ctxmenu_draw(struct trimpod_page *self)
@@ -553,7 +554,7 @@ static void message_draw(struct trimpod_page *self)
     int w, fh = 0, block = 0;
     for (int i = 0; i < p->nrows; i++)
     {
-        s->getstringsize((const unsigned char *)p->rows[i], &w, &fh);
+        s->getstringsize(P2STR((const unsigned char *)p->rows[i]), &w, &fh);
         if (w > block) block = w;                 /* the widest row sets the left edge */
     }
 
@@ -571,7 +572,7 @@ static void message_draw(struct trimpod_page *self)
     if (y < 0) y = 0;
 
     for (int i = 0; i < p->nrows; i++, y += line)
-        s->putsxy(x, y, (const unsigned char *)p->rows[i]);
+        s->putsxy(x, y, P2STR((const unsigned char *)p->rows[i]));
 
     s->update_viewport();
     s->set_viewport(NULL);
@@ -608,12 +609,12 @@ void trimpod_message_page(const char *title, const char *const *rows, int nrows)
 
 /* Controls: a static reference card for the non-obvious inputs. */
 static const char *const controls_rows[] = {
-    "B - Back/Cancel",
-    "A - Play/Enter",
-    "Hold A - Context Menus",
-    "L1/R1 - Seek 10s",
-    "L2/R2 - Chapter Skip",
-    "Side Switch - Lock Buttons",
+    ID2P(LANG_TRIMPOD_CTRL_BACK),
+    ID2P(LANG_TRIMPOD_CTRL_PLAY),
+    ID2P(LANG_TRIMPOD_CTRL_CONTEXT),
+    ID2P(LANG_TRIMPOD_CTRL_SEEK),
+    ID2P(LANG_TRIMPOD_CTRL_CHAPTER),
+    ID2P(LANG_TRIMPOD_CTRL_LOCK),
 };
 #define CONTROLS_NROWS ((int)(sizeof(controls_rows) / sizeof(controls_rows[0])))
 

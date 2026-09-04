@@ -240,11 +240,25 @@ static int lib_poll(struct trimpod_page *self, int timeout)
     return action;
 }
 
+/* Stash the position so the return from Now Playing reopens `artist`/`album`'s
+ * Tracks list at row `sel` (album NULL == All Songs). */
+static void lib_remember(struct lib_page *p, int sel,
+                         const char *artist, const char *album)
+{
+    free(lib_resume.artist);
+    free(lib_resume.album);
+    lib_resume.root_level = p->root_level;
+    lib_resume.artist = artist ? strdup(artist) : NULL;
+    lib_resume.album  = album ? strdup(album) : NULL;
+    memcpy(lib_resume.sel_at, p->sel_at, sizeof lib_resume.sel_at);
+    lib_resume.sel_at[LVL_TRACKS] = sel;
+    lib_resume.pending = true;
+}
+
 /* Stage `paths` as the queue (trimpod_library_stage_paths: bulk m3u write +
  * index scan) and start it at row `sel`; row order == playlist index.  Past the
  * engine cap, lead with `sel` and start at 0 (as ft_build_playlist does) so it
- * is always the one that plays.  Stashes the position so the return from Now
- * Playing reopens `artist`/`album`'s Tracks list (album NULL == All Songs). */
+ * is always the one that plays. */
 static bool lib_play(struct lib_page *p, char **paths, int n, int sel,
                      const char *artist, const char *album)
 {
@@ -256,27 +270,26 @@ static bool lib_play(struct lib_page *p, char **paths, int n, int sel,
         splash(HZ, ID2P(LANG_TRIMPOD_NO_MUSIC));
         return false;
     }
-    trimpod_queue_start(exceeds ? 0 : sel);
-
-    free(lib_resume.artist);
-    free(lib_resume.album);
-    lib_resume.root_level = p->root_level;
-    lib_resume.artist = artist ? strdup(artist) : NULL;
-    lib_resume.album  = album ? strdup(album) : NULL;
-    memcpy(lib_resume.sel_at, p->sel_at, sizeof lib_resume.sel_at);
-    lib_resume.sel_at[LVL_TRACKS] = sel;
-    lib_resume.pending = true;
+    global_settings.playlist_shuffle = false;      /* a new queue: file order */
+    playlist_start(exceeds ? 0 : sel, 0, 0);
+    lib_remember(p, sel, artist, album);
     return true;
 }
 
 /* Tap on the Tracks list: p->paths is index-aligned with the rows (filled when
- * the level loaded), so no DB query runs here. */
+ * the level loaded), so no DB query runs here.  The track already playing is
+ * shown, not restarted. */
 static bool play_track(struct lib_page *p, int sel)
 {
     if (sel < 0 || sel >= p->paths.n)
         return false;
-    return lib_play(p, p->paths.v, p->paths.n, sel, p->artist,
-                    p->all_songs ? NULL : (p->album ? p->album : ""));
+    const char *album = p->all_songs ? NULL : (p->album ? p->album : "");
+    if (trimpod_resume_if_current(p->paths.v[sel]))
+    {
+        lib_remember(p, sel, p->artist, album);
+        return true;
+    }
+    return lib_play(p, p->paths.v, p->paths.n, sel, p->artist, album);
 }
 
 /* Hold-A on an artist/album row: the context menu for `title` over its track

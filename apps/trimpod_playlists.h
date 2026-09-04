@@ -26,20 +26,21 @@ bool trimpod_playlists_take_pending_view(char *path, size_t len);
  * catalog_insert_into() -- a directory is expanded into its tracks. */
 void trimpod_playlists_pick(const char *sel, int sel_attr);
 
-/* Hold-A music context menu: Play / Add to Playlist / Add to Play Queue.
- * The adds are handled here; returns true when the caller should play the
- * selection.  The tracks form takes a path set (a library artist/album has no
- * single path to expand). */
+/* Hold-A music context menu: Play / Play Next / Add to Play Queue / Add to
+ * Playlist.  The adds are handled here; returns true when the caller should
+ * play the selection.  The tracks form takes a path set (a library
+ * artist/album has no single path to expand). */
 bool trimpod_music_context(const char *title, const char *path, int attr);
 bool trimpod_music_context_tracks(const char *title, char **paths, int count);
 
-/* Append a track or directory (recursive) to the live queue; `replace`
- * confirms and starts a new queue from it instead.  Returns true when the
- * queue started playing from this call. */
-bool trimpod_queue_add(const char *path, int attr, bool replace);
+/* Put a track or directory (recursive) into the live queue at `position`:
+ * PLAYLIST_INSERT (after the current track), PLAYLIST_INSERT_LAST (the end)
+ * or PLAYLIST_REPLACE (confirm and start a new queue from it).  Returns true
+ * when the queue started playing from this call. */
+bool trimpod_queue_add(const char *path, int attr, int position);
 
-/* Start the current playlist at `index`, file order, with the same resume
- * bookkeeping a browser tap does. */
-void trimpod_queue_start(int index);
+/* True when `path` is the loaded track, resuming it if paused: the caller
+ * shows Now Playing instead of restarting it. */
+bool trimpod_resume_if_current(const char *path);
 
 #endif /* _TRIMPOD_PLAYLISTS_H */

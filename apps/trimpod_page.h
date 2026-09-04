@@ -92,4 +92,15 @@ void trimpod_page_run(struct trimpod_page *page);
  * dispatcher clears it once it lands on the Main Menu. */
 extern bool trimpod_home_pending;
 
+/* Set with trimpod_home_pending by the idle return to Now Playing: the unwind
+ * lands on the WPS instead of the Main Menu -- backing out (a back slide) when
+ * it started in a screen nested in the WPS, else forward from the root. */
+extern bool trimpod_wps_pending;
+
+/* Idle-tick hook for every menu/browser loop, run after the visualizer's so
+ * that wins a same-second race.  After TRIMPOD_IDLE_TO_WPS seconds without
+ * input while music plays and the screen stays on, starts the unwind to Now
+ * Playing; true when it did (the caller's home check then exits). */
+bool trimpod_idle_to_wps(void);
+
 #endif /* _TRIMPOD_PAGE_H */

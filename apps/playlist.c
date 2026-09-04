@@ -3491,6 +3491,17 @@ void playlist_start(int start_index, unsigned long elapsed,
     playlist->index = start_index;
     playlist->started = true;
 
+    /* Trimpod: clear the insert cursor so the next PLAYLIST_INSERT lands after
+     * the current track, not after the last track appended while building the
+     * queue.  Journalled so a resume agrees. */
+    if (playlist->last_insert_pos >= 0)
+    {
+        playlist->last_insert_pos = -1;
+        if (playlist->control_fd >= 0)
+            update_control_unlocked(playlist, PLAYLIST_COMMAND_RESET,
+                                    -1, -1, NULL, NULL, NULL);
+    }
+
     sync_control_unlocked(playlist);
 
     playlist_write_unlock(playlist);
