@@ -195,14 +195,6 @@ static bool menu_get_chevron(int selected_item, void * data)
            (menu->flags & MENU_SHOW_CHEVRON);
 }
 
-/* Trimpod: A on an inline value row cycles its value forward (+1). */
-int trimpod_value_item_activate(void *value_cb)
-{
-    const struct menu_value_cb *vc = (const struct menu_value_cb *)value_cb;
-    vc->cycle(vc->ctx, +1);
-    return 0;
-}
-
 /* Trimpod: a setting / value row shows its current value right-aligned (the iPod
  * look), so the inline LEFT/RIGHT value cycling is visible without opening a
  * separate screen.  Other rows return nothing (NULL). */
@@ -324,34 +316,6 @@ static int init_menu_lists(const struct menu_item_ex *menu,
     return start_action;
 }
 
-void do_setting_screen(const struct settings_list *setting, const char * title,
-                        struct viewport parent[NB_SCREENS])
-{
-    char padded_title[MAX_PATH];
-    /* Pad the title string by repeating it. This is needed
-       so the scroll settings title can actually be used to
-       test the setting */
-    if (setting->flags&F_PADTITLE)
-    {
-        int i = 0, len;
-        title = P2STR((unsigned char*)title);
-        len = strlen(title);
-        while (i < MAX_PATH-1)
-        {
-            int padlen = MIN(len, MAX_PATH-1-i);
-            memcpy(&padded_title[i], title, padlen);
-            i += padlen;
-            if (i<MAX_PATH-1)
-                padded_title[i++] = ' ';
-        }
-        padded_title[i] = '\0';
-        title = padded_title;
-    }
-
-    option_screen((struct settings_list *)setting, parent,
-                  setting->flags&F_TEMPVAR, (char*)title);
-}
-
 /* display a menu */
 /* render callback for the shared page-slide transition: paint the menu list */
 static void menu_transition_render(void *ctx)
@@ -452,38 +416,42 @@ int do_menu(const struct menu_item_ex *start_menu, int *start_selected,
         else
             action = new_action;
 
-        /* Trimpod: LEFT/RIGHT cycle a setting row's value in place and apply it
-         * live (the iPod inline adjust) instead of page-scrolling.  Uses the
-         * canonical option_select_next_val(); other rows page-scroll normally. */
-        if ((action == ACTION_LISTTREE_PGUP || action == ACTION_LISTTREE_PGDOWN)
+        /* Trimpod: A / LEFT / RIGHT cycle an inline row's value in place and
+         * apply it live (the iPod inline adjust): value rows via their cycler,
+         * setting rows via option_select_next_val().  A and RIGHT step +1,
+         * LEFT -1.  The list is redrawn, never reloaded, so the page keeps its
+         * scroll position.  Only chevron rows open a screen; on other rows
+         * LEFT/RIGHT page-scroll as usual. */
+        if ((action == ACTION_STD_OK || action == ACTION_LISTTREE_PGUP
+             || action == ACTION_LISTTREE_PGDOWN)
             && (menu->flags & MENU_TYPE_MASK) == MT_MENU)
         {
+            bool back = (action == ACTION_LISTTREE_PGUP);
             int isel = get_menu_selection(gui_synclist_get_sel_pos(&lists), menu);
             const struct menu_item_ex *iitem = menu->submenus[isel];
             int itype = (iitem->flags & MENU_TYPE_MASK);
-            if (iitem->flags & MENU_VALUE_ITEM)        /* Trimpod inline knob */
+            if (iitem->flags & MENU_VALUE_ITEM)
             {
                 /* Label-only toggles (empty desc, e.g. Pause/Play) are A-only;
                  * LEFT/RIGHT must not cycle them. */
                 const char *d = P2STR(iitem->callback_and_desc->desc);
-                if (d && d[0])
+                if (action == ACTION_STD_OK || (d && d[0]))
                 {
                     const struct menu_value_cb *vc = iitem->function_param->param;
-                    vc->cycle(vc->ctx, action == ACTION_LISTTREE_PGUP ? -1 : +1);
+                    vc->cycle(vc->ctx, back ? -1 : +1);
                 }
                 redraw_lists = true;
-                action = ACTION_NONE;   /* consume: don't page-scroll the list */
+                action = ACTION_NONE;   /* consumed */
             }
             else if (itype == MT_SETTING || itype == MT_SETTING_W_TEXT)
             {
                 const struct settings_list *iset = find_setting(iitem->variable);
                 if (iset)
                 {
-                    option_select_next_val(iset,
-                                           action == ACTION_LISTTREE_PGUP, true);
+                    option_select_next_val(iset, back, true);
                     redraw_lists = true;
                 }
-                action = ACTION_NONE;   /* consume: don't page-scroll the list */
+                action = ACTION_NONE;   /* consumed */
             }
         }
 
@@ -673,19 +641,6 @@ int do_menu(const struct menu_item_ex *start_menu, int *start_selected,
                             ret =  return_value;
                         }
                     }
-                    break;
-                }
-                case MT_SETTING:
-                case MT_SETTING_W_TEXT:
-                {
-                    /* Trimpod: A cycles the value forward in place (wrapping),
-                     * exactly like RIGHT -- no sub-page.  Only chevron rows
-                     * (MT_MENU / MENU_SHOW_CHEVRON) open a new screen. */
-                    const struct settings_list *set = find_setting(temp->variable);
-                    if (set)
-                        option_select_next_val(set, false, true);
-                    init_menu_lists(menu, &lists, selected, false, vps, buf, sizeof buf);
-                    redraw_lists = true;
                     break;
                 }
                 case MT_RETURN_ID:
