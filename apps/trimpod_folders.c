@@ -20,6 +20,7 @@
  *    contents, browsed with our native music browser.  If no folder exists or
  *    they hold no folders/audio (e.g. the user removed them all), a centered
  *    "(empty)" page is shown instead.
+ *  - Root "Browse": the same browser over the whole card (PICKER_ROOT).
  *
  * The flattened view is a tmpfs "farm" of symlinks
  * (<farm_path>/<name> -> <configured folder>/<name>).  The hosted filesystem
@@ -67,6 +68,15 @@
  * (app_root_realpath() == "/"), so OS and Rockbox paths are interchangeable. */
 extern int symlink(const char *target, const char *linkpath);
 
+/* Last browse position, so re-entering a browse view (incl. returning from
+ * Now Playing) restores the folder + highlighted entry.  Session-only. */
+struct browse_pos
+{
+    char last_dir[FPATH_LEN];
+    char last_sel[FPATH_LEN];
+    bool have_last;
+};
+
 /* One virtual-folder category (Music / Podcasts / Audiobooks). */
 struct folder_category
 {
@@ -80,28 +90,28 @@ struct folder_category
     char folders[MAX_FOLDERS][FPATH_LEN];
     int  n_folders;
 
-    /* Last browse position, so re-entering the root view (incl. returning from
-     * Now Playing) restores the folder you were in + the highlighted entry --
-     * the way stock Rockbox remembers browse_last_folder.  Session-only. */
-    char last_dir[FPATH_LEN];
-    char last_sel[FPATH_LEN];
-    bool have_last;
+    struct browse_pos pos;
 };
 
 /* Music keeps the original "folders.txt" name so existing setups are preserved.
  * The farm dirs live in tmpfs (NOT /tmp/trimpod, a vfat bind-mount that cannot
  * hold symlinks). */
 static struct folder_category cat_music = {
-    "folders.txt", "/mnt/SDCARD/Music", "/tmp/trimpod_music",
-    LANG_TRIMPOD_FOLDERS, LANG_TRIMPOD_MUSIC, {{0}}, 0, {0}, {0}, false,
+    .store_file = "folders.txt", .default_path = "/mnt/SDCARD/Music",
+    .farm_path = "/tmp/trimpod_music",
+    .title_lang = LANG_TRIMPOD_FOLDERS, .browse_lang = LANG_TRIMPOD_MUSIC,
 };
 static struct folder_category cat_podcast = {
-    "podcasts.txt", "/mnt/SDCARD/Podcasts", "/tmp/trimpod_podcasts",
-    LANG_TRIMPOD_PODCAST_FOLDERS, LANG_TRIMPOD_PODCASTS, {{0}}, 0, {0}, {0}, false,
+    .store_file = "podcasts.txt", .default_path = "/mnt/SDCARD/Podcasts",
+    .farm_path = "/tmp/trimpod_podcasts",
+    .title_lang = LANG_TRIMPOD_PODCAST_FOLDERS,
+    .browse_lang = LANG_TRIMPOD_PODCASTS,
 };
 static struct folder_category cat_audiobook = {
-    "audiobooks.txt", "/mnt/SDCARD/Audiobooks", "/tmp/trimpod_audiobooks",
-    LANG_TRIMPOD_AUDIOBOOK_FOLDERS, LANG_TRIMPOD_AUDIOBOOKS, {{0}}, 0, {0}, {0}, false,
+    .store_file = "audiobooks.txt", .default_path = "/mnt/SDCARD/Audiobooks",
+    .farm_path = "/tmp/trimpod_audiobooks",
+    .title_lang = LANG_TRIMPOD_AUDIOBOOK_FOLDERS,
+    .browse_lang = LANG_TRIMPOD_AUDIOBOOKS,
 };
 
 /* ---- storage ---------------------------------------------------------- */
@@ -254,7 +264,7 @@ struct picker_page
      * exits with `result` for the root dispatch (GO_TO_WPS / GO_TO_ROOT) */
     bool   music;
     int    result;
-    struct folder_category *cat;   /* music mode: where to persist the position */
+    struct browse_pos *pos;        /* music mode: where the position persists */
     struct tree_context *mctx;     /* music mode: the stock browse engine state */
 };
 
@@ -312,18 +322,18 @@ static void music_load(struct picker_page *p)
 }
 
 /* Remember the current folder + highlighted entry so the next entry into this
- * category (incl. returning from Now Playing) lands back here. */
+ * view (incl. returning from Now Playing) lands back here. */
 static void browse_save_pos(struct picker_page *p)
 {
-    if (!p->music || !p->cat)
+    if (!p->music || !p->pos)
         return;
-    strlcpy(p->cat->last_dir, p->curdir, sizeof(p->cat->last_dir));
+    strlcpy(p->pos->last_dir, p->curdir, sizeof(p->pos->last_dir));
     int sel = gui_synclist_get_sel_pos(&p->lists);
     if (sel >= 0 && sel < item_count(p))
-        strlcpy(p->cat->last_sel, item_name(p, sel), sizeof(p->cat->last_sel));
+        strlcpy(p->pos->last_sel, item_name(p, sel), sizeof(p->pos->last_sel));
     else
-        p->cat->last_sel[0] = '\0';
-    p->cat->have_last = true;
+        p->pos->last_sel[0] = '\0';
+    p->pos->have_last = true;
 }
 
 /* qsort comparator: natural alphabetical order of the names at two offsets */
@@ -755,92 +765,96 @@ static const char *folder_resolve_root(struct folder_category *cat)
     return NULL;
 }
 
+/* Browse `root` with the stock browse engine, rendered by our picker: folders
+ * descend, tracks play via ft_play_from_context, B at the root leaves.  The
+ * global tree_context is borrowed and restored.  Returns the page result, or
+ * -1 when the root holds no folders/audio (nothing was shown). */
+static int browse_run(const char *root, int title_lang, struct browse_pos *pos)
+{
+    struct tree_context *c = tree_get_context();
+    static int music_filter = SHOW_MUSIC;
+    int  *saved_filter = c->dirfilter;
+    int   saved_sort   = c->sort_dir;
+    bool  saved_brows  = c->is_browsing;
+    struct browse_context *saved_browse = c->browse;
+    char  saved_last[sizeof(global_status.browse_last_folder)];
+    memcpy(saved_last, global_status.browse_last_folder, sizeof(saved_last));
+
+    c->dirfilter   = &music_filter;     /* dirs + audio, folders-first */
+    c->sort_dir    = SORT_ALPHA;
+    c->is_browsing = false;
+    c->browse      = NULL;
+    c->out_of_tree = 0;                 /* ensure ft_load actually loads */
+
+    struct picker_page p =
+    {
+        /* enter_honor_back: returning from Now Playing (which armed a back)
+         * slides the browser in L->R; a fresh open from the root still
+         * enters forward.  no_arm_back: the exit slide is armed explicitly
+         * (only on B at the root), not automatically. */
+        .base = { .vt = &picker_vtable, .context = CONTEXT_LIST,
+                  .allowed = picker_allowed, .no_arm_back = true,
+                  .enter_honor_back = true },
+        .music = true, .result = GO_TO_ROOT,   /* root re-highlights our entry */
+        .pos = pos, .mctx = c,
+    };
+    strlcpy(p.root, root, sizeof(p.root));
+
+    /* Restore the last browse position (incl. on return from Now Playing):
+     * the saved folder if it still exists and sits under this root, else the
+     * root.  pick_reselect re-highlights the saved entry once the list loads. */
+    if (pos->have_last && dir_exists(pos->last_dir) &&
+        strncmp(pos->last_dir, root, strlen(root)) == 0)
+    {
+        strlcpy(p.curdir, pos->last_dir, sizeof(p.curdir));
+        strlcpy(pick_reselect, pos->last_sel, sizeof(pick_reselect));
+    }
+    else
+        strlcpy(p.curdir, root, sizeof(p.curdir));
+
+    gui_synclist_init(&p.lists, pick_get_name, &p, false, 1, NULL);
+    gui_synclist_set_title(&p.lists, (char *)str(title_lang), Icon_Audio);
+    music_load(&p);
+
+    /* If a restored folder turned up empty (its files were since removed),
+     * fall back to the root rather than showing the "(empty)" page. */
+    if (item_count(&p) == 0 && strcmp(p.curdir, root) != 0)
+    {
+        strlcpy(p.curdir, root, sizeof(p.curdir));
+        pick_reselect[0] = '\0';
+        music_load(&p);
+    }
+
+    bool browsed = (item_count(&p) > 0);
+    if (browsed)                        /* has folders/audio: browse it */
+    {
+        push_current_activity(ACTIVITY_FILEBROWSER);
+        trimpod_page_run(&p.base);
+        pop_current_activity();
+    }
+
+    /* Restore the tree context untouched. */
+    c->dirfilter   = saved_filter;
+    c->sort_dir    = saved_sort;
+    c->is_browsing = saved_brows;
+    c->browse      = saved_browse;
+    memcpy(global_status.browse_last_folder, saved_last, sizeof(saved_last));
+
+    if (!browsed)
+        return -1;
+    return p.base.home ? GO_TO_ROOT : p.result;
+}
+
 static int folder_browse(struct folder_category *cat)
 {
     folders_load(cat);
 
     const char *root = folder_resolve_root(cat);
-
     if (root)
     {
-        /* Browse the composed root with the STOCK browse engine (tree_context),
-         * rendered by our native picker: folders descend, tracks play via the
-         * shared ft_play_from_context.  B at the root returns to the main menu
-         * (it never exposes the parent /tmp).  One browse + playlist engine.
-         *
-         * We repoint the global tree_context at a music view for the duration of
-         * the browse and restore it afterwards so the file browser is untouched. */
-        struct tree_context *c = tree_get_context();
-        static int music_filter = SHOW_MUSIC;
-        int  *saved_filter = c->dirfilter;
-        int   saved_sort   = c->sort_dir;
-        bool  saved_brows  = c->is_browsing;
-        struct browse_context *saved_browse = c->browse;
-        char  saved_last[sizeof(global_status.browse_last_folder)];
-        memcpy(saved_last, global_status.browse_last_folder, sizeof(saved_last));
-
-        c->dirfilter   = &music_filter;     /* dirs + audio, folders-first */
-        c->sort_dir    = SORT_ALPHA;
-        c->is_browsing = false;
-        c->browse      = NULL;
-        c->out_of_tree = 0;                 /* ensure ft_load actually loads */
-
-        struct picker_page p =
-        {
-            /* enter_honor_back: returning from Now Playing (which armed a back)
-             * slides the browser in L->R; a fresh open from the root still
-             * enters forward.  no_arm_back: the exit slide is armed explicitly
-             * (only on B at the root), not automatically. */
-            .base = { .vt = &picker_vtable, .context = CONTEXT_LIST,
-                      .allowed = picker_allowed, .no_arm_back = true,
-                      .enter_honor_back = true },
-            .music = true, .result = GO_TO_ROOT,   /* root re-highlights our entry */
-            .cat = cat, .mctx = c,
-        };
-        strlcpy(p.root, root, sizeof(p.root));
-
-        /* Restore the last browse position (incl. on return from Now Playing):
-         * the saved folder if it still exists and sits under this root, else the
-         * root.  pick_reselect re-highlights the saved entry once the list loads. */
-        if (cat->have_last && dir_exists(cat->last_dir) &&
-            strncmp(cat->last_dir, root, strlen(root)) == 0)
-        {
-            strlcpy(p.curdir, cat->last_dir, sizeof(p.curdir));
-            strlcpy(pick_reselect, cat->last_sel, sizeof(pick_reselect));
-        }
-        else
-            strlcpy(p.curdir, root, sizeof(p.curdir));
-
-        gui_synclist_init(&p.lists, pick_get_name, &p, false, 1, NULL);
-        gui_synclist_set_title(&p.lists, (char *)str(cat->browse_lang), Icon_Audio);
-        music_load(&p);
-
-        /* If a restored folder turned up empty (its files were since removed),
-         * fall back to the root rather than showing the "(empty)" page. */
-        if (item_count(&p) == 0 && strcmp(p.curdir, root) != 0)
-        {
-            strlcpy(p.curdir, root, sizeof(p.curdir));
-            pick_reselect[0] = '\0';
-            music_load(&p);
-        }
-
-        bool browsed = (item_count(&p) > 0);
-        if (browsed)                        /* has folders/audio: browse it */
-        {
-            push_current_activity(ACTIVITY_FILEBROWSER);
-            trimpod_page_run(&p.base);
-            pop_current_activity();
-        }
-
-        /* Restore the file browser's context untouched. */
-        c->dirfilter   = saved_filter;
-        c->sort_dir    = saved_sort;
-        c->is_browsing = saved_brows;
-        c->browse      = saved_browse;
-        memcpy(global_status.browse_last_folder, saved_last, sizeof(saved_last));
-
-        if (browsed)
-            return p.base.home ? GO_TO_ROOT : p.result;
+        int r = browse_run(root, cat->browse_lang, &cat->pos);
+        if (r >= 0)
+            return r;
     }
 
     /* No usable source folder yet: instead of a dead-end "(empty)", drop the user
@@ -861,6 +875,20 @@ int trimpod_audiobook_settings(void) { return folders_settings(&cat_audiobook); 
 int trimpod_music_browse(void *param)     { (void)param; return folder_browse(&cat_music); }
 int trimpod_podcast_browse(void *param)   { (void)param; return folder_browse(&cat_podcast); }
 int trimpod_audiobook_browse(void *param) { (void)param; return folder_browse(&cat_audiobook); }
+
+/* root "Browse": the whole card in the same browser as the categories */
+int trimpod_files_browse(void *param)
+{
+    (void)param;
+    static struct browse_pos pos;
+    int r = browse_run(dir_exists(PICKER_ROOT) ? PICKER_ROOT : "/",
+                       LANG_TRIMPOD_BROWSE, &pos);
+    if (r >= 0)
+        return r;
+    splash(HZ, ID2P(LANG_TRIMPOD_NO_MUSIC));
+    trimpod_transition_suppress_next();   /* only a splash: don't re-slide */
+    return GO_TO_ROOT;
+}
 
 /* ---- root "Shuffle All": shuffle + play the whole Music library -----------
  * Every Music track from the index (no filesystem walk), shuffled, straight to

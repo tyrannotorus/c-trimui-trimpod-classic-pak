@@ -22,12 +22,11 @@
 #include "tree.h"
 
 int ft_load(struct tree_context* c, const char* tempdir);
-int ft_enter(struct tree_context* c);
+void ft_enter(struct tree_context* c);
 int ft_exit(struct tree_context* c);
 int ft_assemble_path(char *buf, size_t bufsz,
                       const char* currdir, const char* filename);
 int ft_build_playlist(struct tree_context* c, int start_index);
-bool ft_play_playlist(char* dirname, char* filename);
 /* Build the current dir of `c` into a playlist and start at `sel` (shuffle/
  * bookmark/warn/resume handled).  Returns true if playback started. */
 bool ft_play_from_context(struct tree_context* c, int sel);

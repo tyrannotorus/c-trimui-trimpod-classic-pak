@@ -42,7 +42,6 @@
 #include "lang.h"
 #include "misc.h"
 #include "sound.h"
-#include "onplay.h"
 #include "playback.h"
 #include "splash.h"
 #include "cuesheet.h"
@@ -54,7 +53,6 @@
 #include "trimpod_playlists.h"    /* trimpod_playlists_pick (Add to Playlist) */
 #include "trimpod_page.h"          /* Now Playing is a trimpod_page */
 #include "backdrop.h"
-#include "shortcuts.h"
 #include "appevents.h"
 #include "viewport.h"
 #include "pcmbuf.h"
@@ -385,25 +383,22 @@ static void play_hop(int direction)
 }
 
 
-static void gwps_leave_wps(bool theme_enabled)
+static void gwps_leave_wps(void)
 {
     FOR_NB_SCREENS(i)
     {
         struct gui_wps *gwps = skin_get_gwps(WPS, i);
         gwps->display->scroll_stop();
-        if (theme_enabled)
-        {
 #ifdef HAVE_BACKDROP_IMAGE
-            skin_backdrop_show(sb_get_backdrop(i));
+        skin_backdrop_show(sb_get_backdrop(i));
 
-            /* The following is supposed to erase any traces of %VB
-               viewports drawn by the WPS. May need further thought... */
-            struct wps_data *sbs = skin_get_gwps(CUSTOM_STATUSBAR, i)->data;
-            if (gwps->data->use_extra_framebuffer && sbs->use_extra_framebuffer)
-                skin_update(CUSTOM_STATUSBAR, i, SKIN_REFRESH_ALL);
+        /* The following is supposed to erase any traces of %VB
+           viewports drawn by the WPS. May need further thought... */
+        struct wps_data *sbs = skin_get_gwps(CUSTOM_STATUSBAR, i)->data;
+        if (gwps->data->use_extra_framebuffer && sbs->use_extra_framebuffer)
+            skin_update(CUSTOM_STATUSBAR, i, SKIN_REFRESH_ALL);
 #endif
-            viewportmanager_theme_undo(i, skin_has_sbs(gwps));
-        }
+        viewportmanager_theme_undo(i, skin_has_sbs(gwps));
     }
 
     /* unhandle statusbar update delay */
@@ -423,12 +418,11 @@ static void restore_theme(void)
 
 /*
  * display the wps on entering or restoring */
-static void gwps_enter_wps(bool theme_enabled)
+static void gwps_enter_wps(void)
 {
     struct gui_wps *gwps;
     struct screen *display;
-    if (theme_enabled)
-        restore_theme();
+    restore_theme();
     FOR_NB_SCREENS(i)
     {
         gwps = skin_get_gwps(WPS, i);
@@ -467,7 +461,7 @@ static long do_wps_exit(void)
     update_non_static();
     audio_stop();
 
-    gwps_leave_wps(true);
+    gwps_leave_wps();
     /* GO_TO_PREVIOUS, like the ACTION_WPS_BROWSE exit: _BROWSER resolves a
      * stale last_browser (default 0 = filetree) and lands in the file browser. */
     return GO_TO_PREVIOUS;
@@ -479,7 +473,7 @@ static long do_wps_exit(void)
  *      b)  return with a value evaluated by root_menu.c, in this case the wps
  *          is really left, and root_menu will handle the next screen
  *
- * In either way, call gwps_leave_wps(true), in order to restore the correct
+ * In either way, call gwps_leave_wps(), in order to restore the correct
  * "main screen" backdrops and statusbars
  */
 /* ---- Now Playing as a trimpod_page ------------------------------------- *
@@ -496,7 +490,6 @@ struct wps_page
     bool restore;         /* (re-)enter the WPS theme on the next draw */
     bool exit;            /* leave via do_wps_exit() */
     bool update;          /* force a non-static skin update on the next draw */
-    bool theme_enabled;   /* pass-through to gwps_enter_wps() */
 };
 
 static void wps_page_draw(struct trimpod_page *p)
@@ -525,8 +518,7 @@ static void wps_page_draw(struct trimpod_page *p)
         sb_skin_set_update_delay(0);
         skin_request_full_update(WPS);
         w->update = true;
-        gwps_enter_wps(w->theme_enabled);
-        w->theme_enabled = true;
+        gwps_enter_wps();
     }
     else
     {
@@ -655,55 +647,11 @@ static enum trimpod_page_result wps_page_on_action(struct trimpod_page *p,
 {
     struct wps_page *w = (struct wps_page *)p;
     struct wps_state *state = get_wps_state();
-    bool hotkey = false;
 
         switch(button)
         {
-#ifdef HAVE_HOTKEY
-            case ACTION_WPS_HOTKEY:
-            {
-                hotkey = true;
-                int act = HK_CTX_GET(0, global_settings.context_wps);
-                if (act == HOTKEY_OFF)
-                    break;
-                if (get_hotkey(act)->flags & HOTKEY_FLAG_NOSBS)
-                {
-                    /* leave WPS without re-enabling theme */
-                    w->theme_enabled = false;
-                    gwps_leave_wps(w->theme_enabled);
-                    onplay(state->id3->path,
-                           FILE_ATTR_AUDIO, CONTEXT_WPS, hotkey, ONPLAY_NO_CUSTOMACTION);
-                    if (!audio_status())
-                    {
-                        /* re-enable theme since we're returning to SBS */
-                        gwps_leave_wps(true);
-                        w->result = GO_TO_ROOT;
-                        return TRIMPOD_PAGE_DONE;
-                    }
-                    w->restore = true;
-                    break;
-                }
-            }
-            /* fall through */
-#endif /* def HAVE_HOTKEY */
-            case ACTION_WPS_CONTEXT:
-            {
-                gwps_leave_wps(true);
-                int retval = onplay(state->id3->path,
-                       FILE_ATTR_AUDIO, CONTEXT_WPS, hotkey, ONPLAY_NO_CUSTOMACTION);
-                /* if music is stopped in the context menu we want to exit the wps */
-                if (retval == ONPLAY_MAINMENU
-                    || !audio_status())
-                    { w->result = GO_TO_ROOT; return TRIMPOD_PAGE_DONE; }
-                else if (retval == ONPLAY_PLAYLIST)
-                    { w->result = GO_TO_PLAYLIST_VIEWER; return TRIMPOD_PAGE_DONE; }
-
-                w->restore = true;
-            }
-            break;
-
             case ACTION_WPS_BROWSE:
-                gwps_leave_wps(true);
+                gwps_leave_wps();
                 /* B backs out of Now Playing -> slide the previous screen in L->R.
                  * GO_TO_PREVIOUS (not _BROWSER): the root dispatch resolves the
                  * real previous screen via last_screen. */
@@ -719,12 +667,11 @@ static enum trimpod_page_result wps_page_on_action(struct trimpod_page *p,
                 break;
 
                 /* Hold A: the Now Playing menu (pause/shuffle/repeat/sleep/
-                 * add-to-playlist/visualizer).  Same pattern as ACTION_WPS_CONTEXT:
-                 * leave the skin so the menu themes + tweens, act on the choice,
-                 * then restore the WPS. */
+                 * add-to-playlist/visualizer): leave the skin so the menu
+                 * themes + tweens, act on the choice, then restore the WPS. */
             case ACTION_STD_CONTEXT:
             {
-                gwps_leave_wps(true);
+                gwps_leave_wps();
                 int sel = do_menu(&nowplaying_menu, NULL, NULL, false);
                 if (sel == NP_ADD_TO_PLAYLIST &&
                          state->id3 && state->id3->path[0])
@@ -796,7 +743,7 @@ static enum trimpod_page_result wps_page_on_action(struct trimpod_page *p,
                 break;
             /* menu key functions */
             case ACTION_WPS_MENU:
-                gwps_leave_wps(true);
+                gwps_leave_wps();
                 w->result = GO_TO_ROOT;
                 return TRIMPOD_PAGE_DONE;
 
@@ -829,7 +776,7 @@ static enum trimpod_page_result wps_page_on_action(struct trimpod_page *p,
                         w->update = true;   /* repaint Now Playing */
                         break;
                     }
-                    gwps_leave_wps(true);
+                    gwps_leave_wps();
                     trimpod_visualizer_run();   /* loads while black, fades in; B returns */
                     if (!audio_status())
                         { w->result = GO_TO_ROOT; return TRIMPOD_PAGE_DONE; }
@@ -840,7 +787,7 @@ static enum trimpod_page_result wps_page_on_action(struct trimpod_page *p,
                 ffwd_rew(button, false); /* hopefully fix the ffw/rwd bug */
                 break;
             case ACTION_WPS_VIEW_PLAYLIST:
-                gwps_leave_wps(true);
+                gwps_leave_wps();
                 w->result = GO_TO_PLAYLIST_VIEWER;
                 return TRIMPOD_PAGE_DONE;
             default:
@@ -849,7 +796,7 @@ static enum trimpod_page_result wps_page_on_action(struct trimpod_page *p,
                     case SYS_USB_CONNECTED:
                     case SYS_CALL_INCOMING:
                     case BUTTON_MULTIMEDIA_STOP:
-                        gwps_leave_wps(true);
+                        gwps_leave_wps();
                         w->result = GO_TO_ROOT;
                         return TRIMPOD_PAGE_DONE;
                 }
@@ -894,7 +841,6 @@ long gui_wps_show(void)
         },
         .result        = GO_TO_ROOT,
         .restore       = true,
-        .theme_enabled = true,
     };
 
     wps_state_init();
@@ -904,10 +850,9 @@ long gui_wps_show(void)
     {
         /* Hold-B home: the run loop breaks out before on_action can leave the
          * skin.  w.restore doubles as "the skin is currently left" -- leave
-         * when still entered, and also after a themeless leave (NOSBS hotkey),
-         * whose viewportmanager theme push is still outstanding. */
-        if (!w.restore || !w.theme_enabled)
-            gwps_leave_wps(true);
+         * only when still entered. */
+        if (!w.restore)
+            gwps_leave_wps();
         return GO_TO_ROOT;
     }
     return w.result;

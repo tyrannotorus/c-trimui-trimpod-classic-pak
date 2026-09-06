@@ -37,7 +37,6 @@
 #include "powermgmt.h"
 #include "power.h"
 #include "audio.h"
-#include "shortcuts.h"
 #include "dir.h"
 #include "trimpod_folders.h"
 #include "trimpod_library_browse.h"
@@ -55,11 +54,9 @@ int trimpod_settings_page(void);   /* main_menu.c */
 #include "yesno.h"
 #include "viewport.h"
 
-#include "tree.h"
 #include "wps.h"
 #include "playlist.h"
 #include "playlist_viewer.h"
-#include "playlist_catalog.h"
 #include "menus/exported_menus.h"
 #include "language.h"
 #include "disk.h"
@@ -67,7 +64,6 @@ int trimpod_settings_page(void);   /* main_menu.c */
 struct root_items {
     int (*function)(void* param);
     void* param;
-    const struct menu_item_ex *context_menu;
 };
 static int next_screen = GO_TO_ROOT; /* holding info about the upcoming screen
                                         * which is the current screen for the
@@ -80,73 +76,6 @@ static int last_screen = GO_TO_ROOT; /* unfortunatly needed so we can resume
 static int previous_music = GO_TO_WPS; /* Toggles behavior of the return-to
                                         * playback-button depending
                                         * on FM radio */
-
-static char current_track_path[MAX_PATH];
-static void rootmenu_track_changed_callback(unsigned short id, void* param)
-{
-    (void)id;
-    struct mp3entry *id3 = ((struct track_event *)param)->id3;
-    strmemccpy(current_track_path, id3->path, MAX_PATH);
-}
-static int browser(void* param)
-{
-    int ret_val;
-    int filter = SHOW_SUPPORTED;
-    char folder[MAX_PATH] = "/";
-    /* stuff needed to remember position in file browser */
-    /*static char last_folder[MAX_PATH] = "/"*/
-    char *last_folder = global_status.browse_last_folder;
-
-    switch ((intptr_t)param)
-    {
-        case GO_TO_FILEBROWSER:
-            filter = TP_DIRFILTER;
-            if (TP_BROWSE_CURRENT &&
-                    last_screen == GO_TO_WPS &&
-                    current_track_path[0])
-            {
-                strcpy(folder, current_track_path);
-            }
-            else if (!strcmp(last_folder, "/"))
-            {
-                strcpy(folder, global_settings.start_directory);
-            }
-            else
-            {
-                    strcpy(folder, last_folder);
-            }
-            push_current_activity(ACTIVITY_FILEBROWSER);
-        break;
-    }
-
-    struct browse_context browse = {
-        .dirfilter = filter,
-        .icon = Icon_NOICON,
-        .root = folder,
-    };
-
-    ret_val = rockbox_browse(&browse);
-
-    if (ret_val == GO_TO_WPS
-        || ret_val == GO_TO_PREVIOUS_MUSIC)
-        pop_current_activity_without_refresh();
-    else
-        pop_current_activity();
-
-    switch ((intptr_t)param)
-    {
-        case GO_TO_FILEBROWSER:
-            if (!get_current_file(last_folder, MAX_PATH) ||
-                (!strchr(&last_folder[1], '/') &&
-                 global_settings.start_directory[1] != '\0'))
-            {
-                last_folder[0] = '/';
-                last_folder[1] = '\0';
-            }
-        break;
-    }
-    return ret_val;
-}
 
 static int wpsscrn(void* param)
 {
@@ -265,11 +194,6 @@ static int playlist_view(void * param)
 }
 
 
-/* These are all static const'd from apps/menus/ *.c
-   so little hack so we can use them */
-extern struct menu_item_ex
-        playlist_options;
-
 /* Settings: run the Settings menu_page, then return to the root. */
 static int trimpod_settings_screen(void *param)
 {
@@ -279,21 +203,18 @@ static int trimpod_settings_screen(void *param)
 }
 
 static const struct root_items items[] = {
-    [GO_TO_FILEBROWSER] =   { browser, (void*)GO_TO_FILEBROWSER, NULL},
-    [GO_TO_WPS] =           { wpsscrn, NULL, NULL },
-    [GO_TO_MAINMENU] =      { trimpod_settings_screen, NULL, NULL },
-
-    [GO_TO_PLAYLISTS_SCREEN] = { trimpod_playlists_screen, NULL,
-                                                        &playlist_options },
-    [GO_TO_PLAYLIST_VIEWER] = { playlist_view, NULL, &playlist_options },
-    [GO_TO_SHORTCUTMENU] = { do_shortcut_menu, NULL, NULL },
-    [GO_TO_TRIMPOD_MUSIC] =     { trimpod_music_browse, NULL, NULL },
-    [GO_TO_TRIMPOD_PODCASTS] =  { trimpod_podcast_browse, NULL, NULL },
-    [GO_TO_TRIMPOD_AUDIOBOOKS] = { trimpod_audiobook_browse, NULL, NULL },
-    [GO_TO_TRIMPOD_SHUFFLE] =   { trimpod_shuffle_all, NULL, NULL },
-    [GO_TO_TRIMPOD_ARTISTS] =   { trimpod_library_browse, (void*)(intptr_t)TP_LIB_ARTISTS, NULL },
-    [GO_TO_TRIMPOD_ALBUMS] =    { trimpod_library_browse, (void*)(intptr_t)TP_LIB_ALBUMS, NULL },
-    [GO_TO_TRIMPOD_SONGS] =     { trimpod_library_browse, (void*)(intptr_t)TP_LIB_SONGS, NULL },
+    [GO_TO_FILEBROWSER] =   { trimpod_files_browse, NULL },
+    [GO_TO_WPS] =           { wpsscrn, NULL },
+    [GO_TO_MAINMENU] =      { trimpod_settings_screen, NULL },
+    [GO_TO_PLAYLISTS_SCREEN] = { trimpod_playlists_screen, NULL },
+    [GO_TO_PLAYLIST_VIEWER] = { playlist_view, NULL },
+    [GO_TO_TRIMPOD_MUSIC] =     { trimpod_music_browse, NULL },
+    [GO_TO_TRIMPOD_PODCASTS] =  { trimpod_podcast_browse, NULL },
+    [GO_TO_TRIMPOD_AUDIOBOOKS] = { trimpod_audiobook_browse, NULL },
+    [GO_TO_TRIMPOD_SHUFFLE] =   { trimpod_shuffle_all, NULL },
+    [GO_TO_TRIMPOD_ARTISTS] =   { trimpod_library_browse, (void*)(intptr_t)TP_LIB_ARTISTS },
+    [GO_TO_TRIMPOD_ALBUMS] =    { trimpod_library_browse, (void*)(intptr_t)TP_LIB_ALBUMS },
+    [GO_TO_TRIMPOD_SONGS] =     { trimpod_library_browse, (void*)(intptr_t)TP_LIB_SONGS },
 };
 #define NUM_ITEMS (int)(sizeof(items)/sizeof(*items))
 
@@ -620,7 +541,6 @@ static void ignore_back_button_stub(bool ignore)
 
 static int root_menu_setup_screens(void)
 {
-    add_event(PLAYBACK_EVENT_TRACK_CHANGE, rootmenu_track_changed_callback);
     return GO_TO_ROOT;   /* Trimpod: always start at the Main Menu */
 }
 

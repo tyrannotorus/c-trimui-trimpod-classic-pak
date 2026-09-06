@@ -52,7 +52,6 @@
 #include "root_menu.h"
 #include "audio.h"
 #include "viewport.h"
-#include "shortcuts.h"
 #include "statusbar-skinned.h"
 
 #include "icons.h"

@@ -557,7 +557,7 @@ static enum trimpod_page_result playlist_action(struct playlists_page *p, int se
         case PL_ACT_RENAME:
         {
             /* Pre-fill the keyboard with the current name, then rename the
-             * .m3u8 file -- the same operation fileop.c's rename_file does. */
+             * .m3u8 file. */
             if (trimpod_kbd_input(name, sizeof(name)) == 0 && name[0])
             {
                 char newpath[MAX_PATH];

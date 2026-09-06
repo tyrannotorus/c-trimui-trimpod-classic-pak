@@ -1,4 +1,5 @@
-/* Trimpod: user-managed virtual folders -- Music, Podcasts, Audiobooks
+/* Trimpod: user-managed virtual folders -- Music, Podcasts, Audiobooks -- plus
+ * the card-wide Browse entry, all in one browser
  * (see trimpod_folders.c).  Each is a virtual folder merging a user-managed set
  * of source folders plus an unremovable default; all three share one engine. */
 #ifndef _TRIMPOD_FOLDERS_H
@@ -13,6 +14,8 @@ int trimpod_audiobook_settings(void);
 int trimpod_music_browse(void *param);
 int trimpod_podcast_browse(void *param);
 int trimpod_audiobook_browse(void *param);
+/* root menu "Browse": the whole card in the same browser */
+int trimpod_files_browse(void *param);
 
 /* root menu "Shuffle Songs": build one recursive playlist of every track in the
  * virtual Music folder, shuffle it and start playing.  Returns GO_TO_WPS. */
