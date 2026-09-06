@@ -1215,17 +1215,18 @@ static int add_track_to_playlist_unlocked(struct playlist_info* playlist,
 
             playlist->last_insert_pos = position;
             break;
+        /* Trimpod: an append leaves the insert cursor alone, so a later
+         * PLAYLIST_INSERT still chains after the last inserted track (or the
+         * current one), never after the appended one. */
         case PLAYLIST_INSERT_LAST:
             if (playlist->first_index <= 0)
             {
                 position = insert_position = playlist->amount;
-                playlist->last_insert_pos = position;
                 break;
             }
             /* fallthrough */
         case PLAYLIST_INSERT_LAST_ROTATED:
             position = insert_position = playlist->first_index;
-            playlist->last_insert_pos = position;
             break;
         case PLAYLIST_INSERT_SHUFFLED:
         {
@@ -1693,6 +1694,30 @@ static struct buflib_callbacks ops = {
 /* ************************************************************************** */
 /******************************************************************************/
 /******************************************************************************/
+/* Trimpod: mirror the control journal between the card and its tmpfs working
+ * copy (see PLAYLIST_CONTROL_FILE in rbpaths.h).  A missing source deletes the
+ * destination, so an emptied queue stays empty across the copy. */
+static void control_copy(const char *src, const char *dst)
+{
+    int in = open(src, O_RDONLY);
+    if (in < 0)
+    {
+        remove(dst);
+        return;
+    }
+    int out = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (out >= 0)
+    {
+        char buf[8192];
+        ssize_t n;
+        while ((n = read(in, buf, sizeof(buf))) > 0)
+            if (write(out, buf, n) != n)
+                break;
+        close(out);
+    }
+    close(in);
+}
+
 /*
  * Initialize playlist entries at startup
  */
@@ -1708,6 +1733,9 @@ void playlist_init(void)
 
     strmemccpy(on_disk_playlist.control_filename, PLAYLIST_CONTROL_FILE ".tmp",
                sizeof(on_disk_playlist.control_filename));
+
+    /* Bring last shutdown's journal into the tmpfs working copy for resume. */
+    control_copy(PLAYLIST_CONTROL_PERSIST, PLAYLIST_CONTROL_FILE);
 
     current_playlist.fd = -1;
     on_disk_playlist.fd = -1;
@@ -1738,6 +1766,9 @@ void playlist_shutdown(void)
         pl_close_control(playlist);
 
     playlist_write_unlock(playlist);
+
+    /* Persist the journal to the card. */
+    control_copy(PLAYLIST_CONTROL_FILE, PLAYLIST_CONTROL_PERSIST);
 }
 
 /* returns number of tracks in playlist (includes queued/inserted tracks) */
@@ -3460,6 +3491,16 @@ void playlist_start(int start_index, unsigned long elapsed,
 
     playlist->index = start_index;
     playlist->started = true;
+
+    /* Trimpod: a start clears the insert cursor, so the next PLAYLIST_INSERT
+     * lands after the current track.  Journalled so a resume agrees. */
+    if (playlist->last_insert_pos >= 0)
+    {
+        playlist->last_insert_pos = -1;
+        if (playlist->control_fd >= 0)
+            update_control_unlocked(playlist, PLAYLIST_COMMAND_RESET,
+                                    -1, -1, NULL, NULL, NULL);
+    }
 
     sync_control_unlocked(playlist);
 

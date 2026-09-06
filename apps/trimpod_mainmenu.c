@@ -1,10 +1,9 @@
 /***************************************************************************
  * Trimpod: Main Menu Settings (see trimpod_mainmenu.h).
  *
- * A standard list page (gui_synclist on the trimpod_page base, like the Folders
- * page) of the toggleable root-menu entries.  It looks like any other menu; the
- * only twist is a "[x]"/"[ ]" toggle drawn in the chevron column via the list's
- * indicator callback.  A flips the highlighted row, B leaves.  State persists in
+ * A do_menu of inline value rows, one per toggleable root-menu entry, with a
+ * "[x]"/"[ ]" toggle shown right-aligned through do_menu's value indicator.
+ * A / LEFT / RIGHT flip the highlighted row, B leaves.  State persists in
  * ROCKBOX_DIR/mainmenu.txt and is read by root_menu.c to hide/show the entries.
  ****************************************************************************/
 #include "config.h"

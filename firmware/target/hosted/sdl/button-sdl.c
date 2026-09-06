@@ -379,6 +379,9 @@ int button_read_device(void)
             else if (current_tick - power_down_tick >= POWER_LONG_PRESS_TICKS)
             {
                 power_down_tick = 0;        /* long press -> power off (once) */
+#ifdef HAVE_TRIMUI_SAFE_POWEROFF
+                trimui_safe_poweroff();     /* the Brick, not just the app */
+#endif
                 sys_poweroff();
             }
         }

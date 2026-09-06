@@ -768,7 +768,7 @@ static enum trimpod_page_result vm_on_action(struct trimpod_page *self, int acti
         case ACTION_STD_CONTEXT:     /* Hold A: context submenu for this preset */
             if (have)
             {
-                static const char *const opts[] = { "Preview" };
+                static const char *const opts[] = { ID2P(LANG_TRIMPOD_PREVIEW) };
                 char title[64];
                 if (trimpod_context_menu(vm_get_name(sel, NULL, title,
                                                      sizeof title), opts, 1) == 0)

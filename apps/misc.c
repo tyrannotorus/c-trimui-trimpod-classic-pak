@@ -51,6 +51,7 @@
 #include "sound.h"
 #include "playlist.h"
 #include "trimpod_library.h"
+#include "trimpod_ui.h"      /* trimpod_fullscreen_message */
 #include "yesno.h"
 #include "viewport.h"
 #include "list.h"
@@ -67,7 +68,6 @@
 #include "eeprom_settings.h"
 #include "bmp.h"
 #include "icons.h"
-#include "bookmark.h"
 #include "wps.h"
 #include "playback.h"
 
@@ -334,32 +334,10 @@ static bool clean_shutdown(enum shutdown_type sd_type,
             level = battery_level();
             if (level > 10 || level < 0)
             {
-                {   /* Trimpod: always show the shutdown message.
-                     * Draw the message centered on the FULL screen with no box.
-                     * splash() would draw a bordered box and center it inside
-                     * the theme's (offset) SBS info viewport, not the screen. */
-                    const unsigned char *msg =
-                        (const unsigned char *)str(LANG_SHUTTINGDOWN);
-                    FOR_NB_SCREENS(i)
-                    {
-                        struct screen *s = &screens[i];
-                        struct viewport vp;
-                        int tw = 0, th = 0;
-                        viewport_set_fullscreen(&vp, s->screen_type);
-                        s->set_viewport(&vp);
-                        s->clear_viewport();
-                        s->getstringsize(msg, &tw, &th);
-                        s->putsxy((vp.width - tw) / 2, (vp.height - th) / 2, msg);
-                        s->update_viewport();
-                        s->set_viewport(NULL);
-                    }
-                    /* Present so the message reaches the screen, not just the
-                     * framebuffer, before the process exits. */
-                    lcd_update();
-                    /* Hosted target exits in milliseconds; hold the message on
-                     * screen so it's actually visible before the process quits. */
-                    sleep(HZ);
-                }
+                /* Trimpod: always show the shutdown message, full screen (no
+                 * splash box), held long enough to be seen before exit. */
+                trimpod_fullscreen_message(str(LANG_SHUTTINGDOWN), NULL);
+                sleep(HZ);
             }
             else
             {
@@ -374,8 +352,6 @@ static bool clean_shutdown(enum shutdown_type sd_type,
         }
 
         {
-            bookmark_autobookmark(false);
-
             /* audio_stop_recording == audio_stop for HWCODEC */
             audio_stop();
 
@@ -397,9 +373,8 @@ bool list_stop_handler(void)
     /* Stop the music if it is playing */
     if(audio_status())
     {
-        bookmark_autobookmark(true);
         audio_stop();
-        ret = true;  /* bookmarking can make a refresh necessary */
+        ret = true;  /* status changed: a refresh may be necessary */
     }
 #if CONFIG_CHARGING
 #ifndef HAVE_POWEROFF_WHILE_CHARGING

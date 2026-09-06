@@ -40,8 +40,9 @@ void trimpod_fullscreen_message(const char *msg, const char *widest);
 bool trimpod_confirm(const char *question, const char *detail);
 
 /* Context submenu (opened by holding A on a context-aware entry): a small
- * sliding list Page of `count` option strings titled `title`.  Returns the
- * chosen row index, or -1 if the user backed out with B.  Blocking. */
+ * sliding list Page of `count` options titled `title`.  Items are lang ids
+ * (ID2P) or strings.  Returns the chosen row index, or -1 if the user backed
+ * out with B.  Blocking. */
 int trimpod_context_menu(const char *title, const char *const *items, int count);
 
 /* The About screen: a credits reel that drifts up and down on its own (B leaves).
@@ -52,8 +53,8 @@ void trimpod_about(void);
  * (possibly mid-playback) About open doesn't stall the codec on disk reads. */
 void trimpod_about_prewarm(void);
 
-/* A static text page: `rows` rendered as a centred block under a `title`
- * header (B leaves).  Blocking. */
+/* A static text page: `rows` (lang ids via ID2P, or strings) rendered as a
+ * centred block under a `title` header (B leaves).  Blocking. */
 void trimpod_message_page(const char *title, const char *const *rows, int nrows);
 
 /* The Controls screen: a static list of the app's inputs (B leaves).  Blocking. */

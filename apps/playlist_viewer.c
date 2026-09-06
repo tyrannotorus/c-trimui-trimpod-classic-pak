@@ -34,7 +34,6 @@
 #include "scratch_buf.h"
 #include "keyboard.h"
 #include "filetypes.h"
-#include "onplay.h"
 #include "misc.h"
 #include "action.h"
 #include "debug.h"
@@ -53,6 +52,7 @@
 #include "trimpod_page.h"         /* trimpod_home_pending (hold-BACK -> root) */
 #include "trimpod_ui.h"           /* the Hold-A context menu */
 #include "trimpod_visualizer.h"   /* idle auto-start while music plays */
+#include "trimpod_playlists.h"    /* trimpod_resume_if_current */
 
 
 
@@ -89,9 +89,8 @@ enum direction
     BACKWARD
 };
 
-/* Describes possible outcomes from context (menu or hotkey) action          */
+/* Describes possible outcomes from a context menu action                    */
 enum pv_context_result {
-    PV_CONTEXT_USB,             /* USB-connection initiated                  */
     PV_CONTEXT_MODIFIED,        /* Playlist was modified in some way         */
     PV_CONTEXT_UNCHANGED,       /* No change to playlist, as far as we know  */
 };
@@ -537,29 +536,6 @@ static void format_line(struct playlist_entry* track, char* buf, int buf_sz)
                  skipped, formatted_name, suffix);
 }
 
-/* Fallback for displaying fullscreen tags, in case there is not
- * enough plugin buffer space left to call the view_text plugin
- * from the Track Info screen
- */
-static int view_text(const char *title, const char *text)
-{
-    splashf(0, "[%s]\n%s", title, text);
-    action_userabort(TIMEOUT_BLOCK);
-    return 0;
-}
-
-static enum pv_context_result show_track_info(const struct playlist_entry *current_track)
-{
-    bool id3_retrieval_successful = retrieve_id3_tags(current_track->index,
-                                                      current_track->name,
-                                                      viewer.id3, 0);
-
-    return (id3_retrieval_successful &&
-            browse_id3_ex(viewer.id3, viewer.playlist, current_track->display_index,
-                          viewer.num_tracks, NULL, 1, &view_text)) ?
-           PV_CONTEXT_USB : PV_CONTEXT_UNCHANGED;
-}
-
 /* Edits persist immediately: write an on-disk playlist straight back after
  * every move/remove (no Save item, no save-on-exit prompt).  The current
  * playlist needs nothing -- it lives in its own control file.  playlist_save()
@@ -627,7 +603,8 @@ static enum pv_context_result context_menu(int index)
 
     char name[MAX_PATH];
     format_name(name, current_track->name, sizeof(name));
-    static const char *const opts[] = { "Remove from Playlist", "Move" };
+    static const char *const opts[] =
+        { ID2P(LANG_TRIMPOD_REMOVE_FROM_PLAYLIST), ID2P(LANG_MOVE) };
     int sel = trimpod_context_menu(name, opts, 2);
     if (sel >= 0)
     {
@@ -719,13 +696,6 @@ static bool apply_context_result(enum pv_context_result res)
             viewer.selected_track = viewer.num_tracks-1;
     }
     return false;
-}
-
-static bool update_viewer(struct gui_synclist *playlist_lists, enum pv_context_result res)
-{
-    bool exit = apply_context_result(res);
-    update_gui(playlist_lists, false);
-    return exit;
 }
 
 /* render callback for the back-slide out of the Hold-A context menu: the
@@ -937,10 +907,15 @@ enum playlist_viewer_result playlist_viewer_ex(const char* filename,
                 }
                 else if (!viewer.playlist)
                 {
-                    /* play new track */
-                    playlist_start(current_track->index, 0, 0);
+                    /* play new track; the one playing is left alone */
+                    if (current_track->index != viewer.current_playing_track)
+                        playlist_start(current_track->index, 0, 0);
+                    else if (audio_status() & AUDIO_STATUS_PAUSE)
+                        audio_resume();
                     update_playlist(false);
                 }
+                else if (trimpod_resume_if_current(current_track->name))
+                    goto exit;      /* already playing: just show it */
                 else if (warn_on_pl_erase())
                 {
                     /* Turn it into the current playlist */
@@ -993,40 +968,11 @@ enum playlist_viewer_result playlist_viewer_ex(const char* filename,
             case ACTION_STD_MENU:
                 ret = PLAYLIST_VIEWER_MAINMENU;
                 goto exit;
-#ifdef HAVE_HOTKEY
-            case ACTION_TREE_HOTKEY:
-            {
-                struct playlist_entry *current_track = playlist_buffer_get_track(
-                                                            &viewer.buffer,
-                                                            viewer.selected_track);
-                if (global_settings.hotkey_tree == HOTKEY_PROPERTIES)
-                {
-                    if (show_track_info(current_track) == PV_CONTEXT_USB)
-                    {
-                        ret = PLAYLIST_VIEWER_USB;
-                        goto exit;
-                    }
-                    update_gui(&playlist_lists, false);
-                }
-                else if (global_settings.hotkey_tree == HOTKEY_DELETE)
-                {
-                    if (update_viewer(&playlist_lists,
-                            delete_track(current_track->index,
-                            viewer.selected_track,
-                            (current_track->index == viewer.current_playing_track))))
-                    {
-                        ret = PLAYLIST_VIEWER_CANCEL;
-                        exit = true;
-                    }
-                }
-                else
-                    onplay(current_track->name, FILE_ATTR_AUDIO, CONTEXT_STD, true, ONPLAY_NO_CUSTOMACTION);
-                break;
-            }
-#endif /* HAVE_HOTKEY */
             case ACTION_NONE:   /* idle tick */
                 if (trimpod_visualizer_maybe_autostart())
                     gui_synclist_draw(&playlist_lists);
+                else
+                    trimpod_idle_to_wps();   /* the loop-top home check exits */
                 break;
             default:
                 if(default_event_handler(button) == SYS_USB_CONNECTED)

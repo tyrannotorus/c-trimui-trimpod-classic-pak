@@ -1,9 +1,9 @@
 /* Trimpod: tag-based Music Library browse over the SQLite index.
  *
  * The root-menu "Artists" entry: a three-level in-place navigator -- Artists ->
- * Albums (with an "All Songs" row) -> Tracks.  Selecting a track builds the
- * playlist from the index (trimpod_library_build_playlist) and starts it at that
- * track; returning from Now Playing reopens the Tracks list on the playing song.
+ * Albums (with an "All Songs" row) -> Tracks.  Selecting a track queues the
+ * listed tracks (trimpod_queue_begin/end) and starts at that one; returning
+ * from Now Playing reopens the Tracks list on the playing song.
  * Music category only -- podcasts/audiobooks stay folder-based.  (Rescan Library
  * lives in Settings -> Library.)  See trimpod_library.h for the backend. */
 #ifndef _TRIMPOD_LIBRARY_BROWSE_H

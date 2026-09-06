@@ -22,8 +22,30 @@
 #include "trimpod_page.h"
 #include "trimpod_transition.h"
 #include "trimpod_visualizer.h"   /* idle auto-start while music plays */
+#include "audio.h"                /* audio_status: idle return to Now Playing */
+#include "backlight.h"            /* is_backlight_on */
+#include "button.h"               /* button_last_activity_tick, power_display_off */
+#include "settings.h"
 
 bool trimpod_home_pending;   /* see trimpod_page.h: hold-BACK unwinds to root */
+bool trimpod_wps_pending;    /* ... and lands on Now Playing */
+
+#define TRIMPOD_IDLE_TO_WPS 10   /* seconds idle in the menus before Now Playing returns */
+
+bool trimpod_idle_to_wps(void)
+{
+    int status = audio_status();
+    int screen_off = global_settings.backlight_timeout;   /* seconds, 0 = Never */
+    if (!(status & AUDIO_STATUS_PLAY) || (status & AUDIO_STATUS_PAUSE)
+        /* Auto Screen Off at or under our delay wins the race: stay put */
+        || (screen_off > 0 && screen_off <= TRIMPOD_IDLE_TO_WPS)
+        || power_display_off() || !is_backlight_on(true)
+        || !TIME_AFTER(current_tick, button_last_activity_tick()
+                                     + TRIMPOD_IDLE_TO_WPS * HZ))
+        return false;
+    trimpod_home_pending = trimpod_wps_pending = true;
+    return true;
+}
 
 static bool action_allowed(const int *allowed, int action)
 {
@@ -149,7 +171,17 @@ void trimpod_page_run(struct trimpod_page *page)
          * Main Menu animates, so it's one slide from here to home, not a cascade
          * of slides back through every intermediate screen. */
         if (trimpod_home_pending)
-            continue;
+        {
+            /* idle return that started in a screen nested in the WPS: land
+             * here with one back slide */
+            if (trimpod_wps_pending && page->context == CONTEXT_WPS)
+            {
+                trimpod_home_pending = trimpod_wps_pending = false;
+                trimpod_transition_arm_back();
+            }
+            else
+                continue;
+        }
 
         /* Once shutdown has begun, never redraw: clean_shutdown drew "Shutting
          * Down" and the real exit is deferred (an SDL event), so a page redraw
@@ -166,6 +198,11 @@ void trimpod_page_run(struct trimpod_page *page)
             page_render(page);
             continue;
         }
+        /* idle return to Now Playing: never from the WPS itself, nor from
+         * the keyboard (a half-typed name is not a menu left idle) */
+        if (action == ACTION_NONE && page->context != CONTEXT_WPS
+            && page->context != CONTEXT_KEYBOARD && trimpod_idle_to_wps())
+            continue;
 
         if (trimpod_transition_take_back())
             /* a nested page just exited: slide it out, us back in (L->R) */
