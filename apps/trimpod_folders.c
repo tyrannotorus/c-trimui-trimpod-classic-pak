@@ -885,7 +885,7 @@ int trimpod_audiobook_browse(void *param) { (void)param; return folder_browse(&c
 int trimpod_files_browse(void *param)
 {
     (void)param;
-    struct browse_pos pos = {0};   /* fresh each time: always start at the card */
+    struct browse_pos pos = {0};   /* fresh each time: open at the card */
     int r = GO_TO_ROOT;
     browse_run("/", dir_exists(PICKER_ROOT) ? PICKER_ROOT : "/",
                LANG_TRIMPOD_BROWSE, &pos, true, &r);
