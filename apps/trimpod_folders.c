@@ -879,12 +879,13 @@ int trimpod_music_browse(void *param)     { (void)param; return folder_browse(&c
 int trimpod_podcast_browse(void *param)   { (void)param; return folder_browse(&cat_podcast); }
 int trimpod_audiobook_browse(void *param) { (void)param; return folder_browse(&cat_audiobook); }
 
-/* root "Browse": the whole filesystem in the same browser as the categories,
- * opening at the card.  An empty folder is just an empty list. */
+/* root "Browse": the whole filesystem in the same browser as the categories.
+ * Every entry opens at the card -- no remembered position, which could be the
+ * Linux root after backing out.  An empty folder is just an empty list. */
 int trimpod_files_browse(void *param)
 {
     (void)param;
-    static struct browse_pos pos;
+    struct browse_pos pos = {0};   /* fresh each time: always start at the card */
     int r = GO_TO_ROOT;
     browse_run("/", dir_exists(PICKER_ROOT) ? PICKER_ROOT : "/",
                LANG_TRIMPOD_BROWSE, &pos, true, &r);
