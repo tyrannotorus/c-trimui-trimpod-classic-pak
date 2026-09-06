@@ -11,7 +11,7 @@
   ],
   "platforms": ["tg5040"],
   "changelog": {
-    "v1.0.10": "- Play Next and Add to Play Queue in context menus\n- Selecting the playing track opens Now Playing\n- Idle menus return to Now Playing after 10 s\n- Fixed status bar flash on track skip\n- Holding Power powers off\n- Shuffle All draws from the whole library, not the first 10000 titles\n- Play queue limit raised to 100000 tracks\n- Browse uses the same folder screen and context menu as Music",
+    "v1.0.10": "- Play Next and Add to Play Queue added to context menus\n- Idle menus return to Now Playing after 10 s\n- Holding Power powers off instead of exiting app\n- Play Queue limit increased to avoid truncated lists",
     "v1.0.9": "Indexing shows a Scanning Library progress screen instead of a blank screen. Adding or removing a library folder reindexes immediately. Launch after a library change no longer stalls for ~15 s.",
     "v1.0.8": "Audiobook support for .m4b files: each book resumes from where you left off, and L2/R2 skip between chapters.",
     "v1.0.7": "Added Themes with Dark, Light, and a third ink variant per color. Volume bar now reads 'Volume X/40'. Fixed: playlist song menu not sliding back on close, status bar showing '.trimpod_queue', divider line ignoring the foreground color, and Now Playing spacing/status-bar text alignment.",
