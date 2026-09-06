@@ -767,9 +767,11 @@ static const char *folder_resolve_root(struct folder_category *cat)
 
 /* Browse `root` with the stock browse engine, rendered by our picker: folders
  * descend, tracks play via ft_play_from_context, B at the root leaves.  The
- * global tree_context is borrowed and restored.  Returns the page result, or
- * -1 when the root holds no folders/audio (nothing was shown). */
-static int browse_run(const char *root, int title_lang, struct browse_pos *pos)
+ * global tree_context is borrowed and restored.  A root with no folders/audio
+ * is shown only if `show_empty`; otherwise nothing is shown and false comes
+ * back.  The page result lands in *result. */
+static bool browse_run(const char *root, int title_lang, struct browse_pos *pos,
+                       bool show_empty, int *result)
 {
     struct tree_context *c = tree_get_context();
     static int music_filter = SHOW_MUSIC;
@@ -825,8 +827,8 @@ static int browse_run(const char *root, int title_lang, struct browse_pos *pos)
         music_load(&p);
     }
 
-    bool browsed = (item_count(&p) > 0);
-    if (browsed)                        /* has folders/audio: browse it */
+    bool browsed = show_empty || item_count(&p) > 0;
+    if (browsed)
     {
         push_current_activity(ACTIVITY_FILEBROWSER);
         trimpod_page_run(&p.base);
@@ -841,8 +843,9 @@ static int browse_run(const char *root, int title_lang, struct browse_pos *pos)
     memcpy(global_status.browse_last_folder, saved_last, sizeof(saved_last));
 
     if (!browsed)
-        return -1;
-    return p.base.home ? GO_TO_ROOT : p.result;
+        return false;
+    *result = p.base.home ? GO_TO_ROOT : p.result;
+    return true;
 }
 
 static int folder_browse(struct folder_category *cat)
@@ -850,12 +853,9 @@ static int folder_browse(struct folder_category *cat)
     folders_load(cat);
 
     const char *root = folder_resolve_root(cat);
-    if (root)
-    {
-        int r = browse_run(root, cat->browse_lang, &cat->pos);
-        if (r >= 0)
-            return r;
-    }
+    int r;
+    if (root && browse_run(root, cat->browse_lang, &cat->pos, false, &r))
+        return r;
 
     /* No usable source folder yet: instead of a dead-end "(empty)", drop the user
      * into THIS category's folder list (the default folder + "+ Add Folder") so
@@ -876,18 +876,16 @@ int trimpod_music_browse(void *param)     { (void)param; return folder_browse(&c
 int trimpod_podcast_browse(void *param)   { (void)param; return folder_browse(&cat_podcast); }
 int trimpod_audiobook_browse(void *param) { (void)param; return folder_browse(&cat_audiobook); }
 
-/* root "Browse": the whole card in the same browser as the categories */
+/* root "Browse": the whole card in the same browser as the categories.  An
+ * empty card is just an empty list; B at the root is the way out. */
 int trimpod_files_browse(void *param)
 {
     (void)param;
     static struct browse_pos pos;
-    int r = browse_run(dir_exists(PICKER_ROOT) ? PICKER_ROOT : "/",
-                       LANG_TRIMPOD_BROWSE, &pos);
-    if (r >= 0)
-        return r;
-    splash(HZ, ID2P(LANG_TRIMPOD_NO_MUSIC));
-    trimpod_transition_suppress_next();   /* only a splash: don't re-slide */
-    return GO_TO_ROOT;
+    int r = GO_TO_ROOT;
+    browse_run(dir_exists(PICKER_ROOT) ? PICKER_ROOT : "/", LANG_TRIMPOD_BROWSE,
+               &pos, true, &r);
+    return r;
 }
 
 /* ---- root "Shuffle All": shuffle + play the whole Music library -----------
