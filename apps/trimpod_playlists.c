@@ -374,10 +374,9 @@ static void edit_playlist(int sel)
  * Next: after the current track, successive picks in order while that track
  * stays current), PLAYLIST_INSERT_LAST (Add to Play Queue: the end) or
  * PLAYLIST_REPLACE (a new queue).  With no queue the selection becomes one
- * and starts playing.  Inserts are silent
- * (progress=false): the user stays on the current screen, so the "Inserted N"
- * modal would just flash over it. */
-struct queue_op { struct playlist_insert_context ctx; bool fresh; int pos; };
+ * and starts playing.  Adds are tmpfs journal lines (rbpaths.h), so any size
+ * costs no card I/O.  Inserts are silent (progress=false): the user stays on
+ * the current screen, so the "Inserted N" modal would just flash over it. */
 
 /* The saved queue is only loaded into RAM by Resume Playback, so until then
  * playlist_amount() is 0 although a queue exists; judge by the resume point. */
@@ -398,7 +397,7 @@ bool trimpod_resume_if_current(const char *path)
 }
 
 /* False when declined or the control file is unavailable: nothing to close. */
-static bool queue_open(struct queue_op *q, int position)
+bool trimpod_queue_begin(struct trimpod_queue *q, int position)
 {
     memset(q, 0, sizeof *q);
     bool replace = position == PLAYLIST_REPLACE;
@@ -430,14 +429,37 @@ static bool queue_open(struct queue_op *q, int position)
     return true;
 }
 
-/* A queue built from nothing starts playing; returns whether it did. */
-static bool queue_close(struct queue_op *q)
+bool trimpod_queue_add_path(const char *path, void *q)
+{
+    struct trimpod_queue *b = q;
+    yield();                                   /* keep the codec fed */
+    return playlist_insert_context_add(&b->ctx, path) >= 0;
+}
+
+/* paths[first..] wrapping at n, at most the cap, so a tapped row past the cap
+ * can lead the queue.  Stops at the first refusal (the engine splashes). */
+void trimpod_queue_add_paths(struct trimpod_queue *q, char **paths, int n,
+                             int first)
+{
+    int cap = TRIMPOD_MAX_FILES_IN_PLAYLIST;
+    if (n < cap)
+        cap = n;
+    for (int k = 0; k < cap; k++)
+        if (!trimpod_queue_add_path(paths[(first + k) % n], q))
+            break;
+}
+
+/* A fresh queue starts playing at `start` (0 if out of range), shuffled first
+ * if `shuffle`; returns whether it did.  The one start for built queues. */
+bool trimpod_queue_end(struct trimpod_queue *q, int start, bool shuffle)
 {
     playlist_insert_context_release(&q->ctx);
     if (!q->fresh || playlist_amount() <= 0)
         return false;
-    global_settings.playlist_shuffle = false;      /* a new queue: file order */
-    playlist_start(0, 0, 0);
+    global_settings.playlist_shuffle = shuffle;    /* Now Playing shows it */
+    if (shuffle)
+        playlist_shuffle(current_tick, -1);
+    playlist_start(start < playlist_amount() ? start : 0, 0, 0);
     return true;
 }
 
@@ -451,7 +473,7 @@ static int first_audio_cb(char *name, void *found)
 
 bool trimpod_queue_add(const char *path, int attr, int position)
 {
-    struct queue_op q;
+    struct trimpod_queue q;
     bool replace = position == PLAYLIST_REPLACE;
     if ((attr & ATTR_DIRECTORY) && (replace || !queue_exists()))
     {
@@ -466,36 +488,31 @@ bool trimpod_queue_add(const char *path, int attr, int position)
             return false;
         }
     }
-    if (!queue_open(&q, position))
+    if (!trimpod_queue_begin(&q, position))
         return false;
     if (attr & ATTR_DIRECTORY)
         playlist_insert_directory(NULL, path, q.pos, false, true, &q.ctx);
     else
         playlist_insert_context_add(&q.ctx, path);
-    return queue_close(&q);
+    return trimpod_queue_end(&q, 0, false);
 }
 
 static void queue_add_tracks(char **paths, int count, int position)
 {
-    struct queue_op q;
-    if (!queue_open(&q, position))
+    struct trimpod_queue q;
+    if (!trimpod_queue_begin(&q, position))
         return;
-    for (int i = 0; i < count; i++)
-    {
-        yield();                                   /* keep the codec fed */
-        if (playlist_insert_context_add(&q.ctx, paths[i]) < 0)
-            break;
-    }
-    queue_close(&q);
+    trimpod_queue_add_paths(&q, paths, count, 0);
+    trimpod_queue_end(&q, 0, false);
 }
 
 static void queue_add_playlist(const char *path)
 {
-    struct queue_op q;
-    if (!queue_open(&q, false))
+    struct trimpod_queue q;
+    if (!trimpod_queue_begin(&q, PLAYLIST_INSERT_LAST))
         return;
     playlist_entries_iterate(path, &q.ctx, NULL);
-    queue_close(&q);
+    trimpod_queue_end(&q, 0, false);
 }
 
 /* The per-playlist Hold-A context menu, titled with the playlist's name.

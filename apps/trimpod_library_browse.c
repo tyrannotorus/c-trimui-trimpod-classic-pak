@@ -32,7 +32,7 @@
 #include "gui/list.h"
 #include "icon.h"
 #include "playlist.h"
-#include "misc.h"      /* warn_on_pl_erase, push/pop_current_activity */
+#include "misc.h"      /* push/pop_current_activity */
 #include "pathfuncs.h" /* path_basename (untagged-track fallback) */
 #include "root_menu.h" /* GO_TO_WPS / GO_TO_ROOT */
 #include "trimpod_page.h"
@@ -255,23 +255,19 @@ static void lib_remember(struct lib_page *p, int sel,
     lib_resume.pending = true;
 }
 
-/* Stage `paths` as the queue (trimpod_library_stage_paths: bulk m3u write +
- * index scan) and start it at row `sel`; row order == playlist index.  Past the
+/* Queue `paths` and start at row `sel`; row order == playlist index.  Past the
  * engine cap, lead with `sel` and start at 0 (as ft_build_playlist does) so it
  * is always the one that plays. */
 static bool lib_play(struct lib_page *p, char **paths, int n, int sel,
                      const char *artist, const char *album)
 {
-    if (!warn_on_pl_erase())
+    struct trimpod_queue q;
+    if (!trimpod_queue_begin(&q, PLAYLIST_REPLACE))
         return false;
     bool exceeds = n > TRIMPOD_MAX_FILES_IN_PLAYLIST;
-    if (trimpod_library_stage_paths(paths, n, exceeds ? sel : 0) <= 0)
-    {
-        splash(HZ, ID2P(LANG_TRIMPOD_NO_MUSIC));
+    trimpod_queue_add_paths(&q, paths, n, exceeds ? sel : 0);
+    if (!trimpod_queue_end(&q, exceeds ? 0 : sel, false))
         return false;
-    }
-    global_settings.playlist_shuffle = false;      /* a new queue: file order */
-    playlist_start(exceeds ? 0 : sel, 0, 0);
     lib_remember(p, sel, artist, album);
     return true;
 }

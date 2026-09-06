@@ -6,6 +6,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include "playlist.h"          /* struct playlist_insert_context */
 
 /* root menu Playlists entry (a root_menu items[] function) */
 int trimpod_playlists_screen(void *param);
@@ -38,6 +39,24 @@ bool trimpod_music_context_tracks(const char *title, char **paths, int count);
  * or PLAYLIST_REPLACE (confirm and start a new queue from it).  Returns true
  * when the queue started playing from this call. */
 bool trimpod_queue_add(const char *path, int attr, int position);
+
+/* A queue build in steps: begin() opens the insert at `position`
+ * (PLAYLIST_REPLACE confirms the erase and starts fresh; false = declined or
+ * no control file), add_path()/add_paths() fill it, end() starts a fresh queue
+ * at `start` (shuffled first if `shuffle`) and returns whether playback
+ * started.  add_path doubles as a trimpod_library enumerator callback
+ * (false = the engine refused). */
+struct trimpod_queue
+{
+    struct playlist_insert_context ctx;
+    bool fresh;
+    int pos;
+};
+bool trimpod_queue_begin(struct trimpod_queue *q, int position);
+bool trimpod_queue_add_path(const char *path, void *q);
+void trimpod_queue_add_paths(struct trimpod_queue *q, char **paths, int n,
+                             int first);
+bool trimpod_queue_end(struct trimpod_queue *q, int start, bool shuffle);
 
 /* True when `path` is the loaded track, resuming it if paused: the caller
  * shows Now Playing instead of restarting it. */

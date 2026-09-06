@@ -35,7 +35,7 @@
 #include <string.h>
 #include "string-extra.h"
 #include "strnatcmp.h"   /* natural alphabetical sort (2 before 10) */
-#include "kernel.h"      /* current_tick (shuffle seed) */
+#include "kernel.h"      /* HZ */
 #include "file.h"
 #include "dir.h"
 #include "pathfuncs.h"
@@ -56,7 +56,7 @@
 #include "trimpod_page.h"
 #include "trimpod_transition.h"   /* slide on folder descend/ascend */
 #include "trimpod_playlists.h"    /* Hold-A = add highlighted file/folder to a playlist */
-#include "trimpod_library.h"      /* Shuffle Songs builds from the SQLite index */
+#include "trimpod_library.h"      /* Shuffle All's track set */
 
 #define PICKER_ROOT     "/mnt/SDCARD"
 #define MAX_FOLDERS     24
@@ -862,13 +862,9 @@ int trimpod_music_browse(void *param)     { (void)param; return folder_browse(&c
 int trimpod_podcast_browse(void *param)   { (void)param; return folder_browse(&cat_podcast); }
 int trimpod_audiobook_browse(void *param) { (void)param; return folder_browse(&cat_audiobook); }
 
-/* ---- root "Shuffle": shuffle + play the whole Music folder ----------------
- * Builds ONE dynamic playlist of every track in the Music library, shuffles it
- * and starts playback.  Music only -- podcasts/audiobooks are never shuffled.
- * The track list comes from the SQLite index (trimpod_library), so this is a
- * query + batched insert rather than a recursive filesystem walk; we slide
- * straight to the WPS with no per-batch "inserting" splash.  Tracks beyond
- * TRIMPOD_MAX_FILES_IN_PLAYLIST (10000) are still capped by the playlist engine. */
+/* ---- root "Shuffle All": shuffle + play the whole Music library -----------
+ * Every Music track from the index (no filesystem walk), shuffled, straight to
+ * Now Playing.  Music only -- podcasts/audiobooks are never shuffled. */
 int trimpod_shuffle_all(void *param)
 {
     (void)param;
@@ -882,21 +878,15 @@ int trimpod_shuffle_all(void *param)
         return GO_TO_ROOT;
     }
 
-    /* about to replace the current playlist -- let the user cancel */
-    if (!warn_on_pl_erase())
+    struct trimpod_queue q;
+    if (!trimpod_queue_begin(&q, PLAYLIST_REPLACE))   /* declined the erase */
         return GO_TO_ROOT;
-
-    /* Build the shuffle set from the index -- a query + batched insert, not a
-     * recursive filesystem walk. */
-    if (trimpod_library_build_playlist(TP_CAT_MUSIC, NULL, NULL) <= 0)
+    trimpod_library_music_paths(trimpod_queue_add_path, &q);
+    if (!trimpod_queue_end(&q, 0, true))              /* nothing indexed */
     {
         splash(HZ, ID2P(LANG_TRIMPOD_NO_MUSIC));
         trimpod_transition_suppress_next();   /* only a splash: don't re-slide the menu */
         return GO_TO_ROOT;
     }
-
-    global_settings.playlist_shuffle = true;   /* Now Playing shows Shuffle: On */
-    playlist_shuffle(current_tick, -1);
-    playlist_start(0, 0, 0);
     return GO_TO_WPS;
 }
