@@ -60,7 +60,7 @@
 #include "trimpod_playlists.h"    /* Hold-A = add highlighted file/folder to a playlist */
 #include "trimpod_library.h"      /* Shuffle All's track set */
 
-#define PICKER_ROOT     "/mnt/SDCARD"   /* where pickers open; B walks up to / */
+#define PICKER_ROOT     "/mnt/SDCARD"   /* pickers open here, walk up to / */
 #define MAX_FOLDERS     24
 #define FPATH_LEN       MAX_PATH
 #define LOAD_BUFSZ      (MAX_FOLDERS * FPATH_LEN)
@@ -579,7 +579,8 @@ static bool folder_pick(char *out, size_t out_len)
         .out = out, .out_len = out_len, .picked = false,
     };
     strlcpy(p.root, "/", sizeof(p.root));
-    strlcpy(p.curdir, dir_exists(PICKER_ROOT) ? PICKER_ROOT : "/", sizeof(p.curdir));
+    strlcpy(p.curdir, dir_exists(PICKER_ROOT) ? PICKER_ROOT : "/",
+            sizeof(p.curdir));
 
     gui_synclist_init(&p.lists, pick_get_name, &p, false, 1, NULL);
     gui_synclist_set_title(&p.lists, str(LANG_TRIMPOD_ADD_FOLDER), Icon_file_view_menu);
@@ -806,7 +807,7 @@ static bool browse_run(const char *root, const char *start, int title_lang,
 
     /* Restore the last browse position (incl. on return from Now Playing):
      * the saved folder if it still exists and sits under this root, else
-     * `start`.  pick_reselect re-highlights the saved entry once the list loads. */
+     * `start`.  pick_reselect re-highlights the saved entry on load. */
     if (pos->have_last && dir_exists(pos->last_dir) &&
         strncmp(pos->last_dir, root, strlen(root)) == 0)
     {
