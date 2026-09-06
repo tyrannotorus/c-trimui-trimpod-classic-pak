@@ -20,7 +20,8 @@
  *    contents, browsed with our native music browser.  If no folder exists or
  *    they hold no folders/audio (e.g. the user removed them all), a centered
  *    "(empty)" page is shown instead.
- *  - Root "Browse": the same browser over the whole card (PICKER_ROOT).
+ *  - Root "Browse": the same browser over the whole filesystem, opening at
+ *    PICKER_ROOT; B walks up to / and leaves from there.
  *
  * The flattened view is a tmpfs "farm" of symlinks
  * (<farm_path>/<name> -> <configured folder>/<name>).  The hosted filesystem
@@ -59,7 +60,7 @@
 #include "trimpod_playlists.h"    /* Hold-A = add highlighted file/folder to a playlist */
 #include "trimpod_library.h"      /* Shuffle All's track set */
 
-#define PICKER_ROOT     "/mnt/SDCARD"
+#define PICKER_ROOT     "/mnt/SDCARD"   /* where pickers open; B walks up to / */
 #define MAX_FOLDERS     24
 #define FPATH_LEN       MAX_PATH
 #define LOAD_BUFSZ      (MAX_FOLDERS * FPATH_LEN)
@@ -577,8 +578,8 @@ static bool folder_pick(char *out, size_t out_len)
                   .allowed = picker_allowed },
         .out = out, .out_len = out_len, .picked = false,
     };
-    strlcpy(p.root, dir_exists(PICKER_ROOT) ? PICKER_ROOT : "/", sizeof(p.root));
-    strlcpy(p.curdir, p.root, sizeof(p.curdir));
+    strlcpy(p.root, "/", sizeof(p.root));
+    strlcpy(p.curdir, dir_exists(PICKER_ROOT) ? PICKER_ROOT : "/", sizeof(p.curdir));
 
     gui_synclist_init(&p.lists, pick_get_name, &p, false, 1, NULL);
     gui_synclist_set_title(&p.lists, str(LANG_TRIMPOD_ADD_FOLDER), Icon_file_view_menu);
@@ -765,13 +766,14 @@ static const char *folder_resolve_root(struct folder_category *cat)
     return NULL;
 }
 
-/* Browse `root` with the stock browse engine, rendered by our picker: folders
- * descend, tracks play via ft_play_from_context, B at the root leaves.  The
- * global tree_context is borrowed and restored.  A root with no folders/audio
- * is shown only if `show_empty`; otherwise nothing is shown and false comes
- * back.  The page result lands in *result. */
-static bool browse_run(const char *root, int title_lang, struct browse_pos *pos,
-                       bool show_empty, int *result)
+/* Browse with the stock browse engine, rendered by our picker: folders descend,
+ * tracks play via ft_play_from_context, B walks up to `root` and leaves from
+ * there; a fresh open lands in `start` (under root).  The global tree_context
+ * is borrowed and restored.  A start with no folders/audio is shown only if
+ * `show_empty`; otherwise nothing is shown and false comes back.  The page
+ * result lands in *result. */
+static bool browse_run(const char *root, const char *start, int title_lang,
+                       struct browse_pos *pos, bool show_empty, int *result)
 {
     struct tree_context *c = tree_get_context();
     static int music_filter = SHOW_MUSIC;
@@ -803,8 +805,8 @@ static bool browse_run(const char *root, int title_lang, struct browse_pos *pos,
     strlcpy(p.root, root, sizeof(p.root));
 
     /* Restore the last browse position (incl. on return from Now Playing):
-     * the saved folder if it still exists and sits under this root, else the
-     * root.  pick_reselect re-highlights the saved entry once the list loads. */
+     * the saved folder if it still exists and sits under this root, else
+     * `start`.  pick_reselect re-highlights the saved entry once the list loads. */
     if (pos->have_last && dir_exists(pos->last_dir) &&
         strncmp(pos->last_dir, root, strlen(root)) == 0)
     {
@@ -812,17 +814,17 @@ static bool browse_run(const char *root, int title_lang, struct browse_pos *pos,
         strlcpy(pick_reselect, pos->last_sel, sizeof(pick_reselect));
     }
     else
-        strlcpy(p.curdir, root, sizeof(p.curdir));
+        strlcpy(p.curdir, start, sizeof(p.curdir));
 
     gui_synclist_init(&p.lists, pick_get_name, &p, false, 1, NULL);
     gui_synclist_set_title(&p.lists, (char *)str(title_lang), Icon_Audio);
     music_load(&p);
 
     /* If a restored folder turned up empty (its files were since removed),
-     * fall back to the root rather than showing the "(empty)" page. */
-    if (item_count(&p) == 0 && strcmp(p.curdir, root) != 0)
+     * fall back to `start` rather than showing the "(empty)" page. */
+    if (item_count(&p) == 0 && strcmp(p.curdir, start) != 0)
     {
-        strlcpy(p.curdir, root, sizeof(p.curdir));
+        strlcpy(p.curdir, start, sizeof(p.curdir));
         pick_reselect[0] = '\0';
         music_load(&p);
     }
@@ -854,7 +856,7 @@ static int folder_browse(struct folder_category *cat)
 
     const char *root = folder_resolve_root(cat);
     int r;
-    if (root && browse_run(root, cat->browse_lang, &cat->pos, false, &r))
+    if (root && browse_run(root, root, cat->browse_lang, &cat->pos, false, &r))
         return r;
 
     /* No usable source folder yet: instead of a dead-end "(empty)", drop the user
@@ -876,15 +878,15 @@ int trimpod_music_browse(void *param)     { (void)param; return folder_browse(&c
 int trimpod_podcast_browse(void *param)   { (void)param; return folder_browse(&cat_podcast); }
 int trimpod_audiobook_browse(void *param) { (void)param; return folder_browse(&cat_audiobook); }
 
-/* root "Browse": the whole card in the same browser as the categories.  An
- * empty card is just an empty list; B at the root is the way out. */
+/* root "Browse": the whole filesystem in the same browser as the categories,
+ * opening at the card.  An empty folder is just an empty list. */
 int trimpod_files_browse(void *param)
 {
     (void)param;
     static struct browse_pos pos;
     int r = GO_TO_ROOT;
-    browse_run(dir_exists(PICKER_ROOT) ? PICKER_ROOT : "/", LANG_TRIMPOD_BROWSE,
-               &pos, true, &r);
+    browse_run("/", dir_exists(PICKER_ROOT) ? PICKER_ROOT : "/",
+               LANG_TRIMPOD_BROWSE, &pos, true, &r);
     return r;
 }
 
