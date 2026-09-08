@@ -47,8 +47,9 @@
 #include "trimpod_spectrum.h"
 #include "trimpod_eq.h"
 
-/* Refresh rate for the live audio spectrum (the %pm element). */
-#define SPECTRUM_FPS 30
+/* Refresh rate for the live audio spectrum (the %pm element): 5 ticks, every
+ * third refresh of the 60 Hz panel, so the cadence is even. */
+#define SPECTRUM_FPS 20
 /* Image stuff */
 #include "bmp.h"
 
@@ -93,7 +94,9 @@ void skin_update(enum skinnable_screens skin, enum screen_type screen,
     if (cuesheet_update)
         skin_request_full_update(skin);
 
-    bool full = skin_do_full_update(skin, screen);
+    /* an explicit SKIN_REFRESH_ALL is a full render too: atomic path below */
+    bool full = skin_do_full_update(skin, screen)
+                || update_type == SKIN_REFRESH_ALL;
 
     if (skin == WPS && full)
     {
@@ -654,8 +657,26 @@ int skin_wait_for_action(enum skinnable_screens skin, int context, int timeout)
     if (lcd_panel_is_dark())
         spectrum = false;
 
+    /* Paused: trimpod_spectrum_draw feeds silence, so once the bars have
+     * decayed nothing moves -- stop presenting frames. */
+    static long paused_at;
+    if (audio_status() & AUDIO_STATUS_PAUSE)
+    {
+        if (!paused_at)
+            paused_at = current_tick;
+        else if (TIME_AFTER(current_tick, paused_at + HZ))
+            spectrum = false;
+    }
+    else
+        paused_at = 0;
+
     if (spectrum) {
-        long next_refresh = current_tick;
+        /* The frame clock persists across calls, so a re-entry (every big
+         * refresh, every button) does not present an extra frame.  A stale
+         * clock (we were away) restarts now. */
+        static long next_refresh;
+        if (TIME_BEFORE(next_refresh, current_tick - HZ / SPECTRUM_FPS))
+            next_refresh = current_tick;
         long next_big_refresh = current_tick + timeout;
         button = BUTTON_NONE;
         while (TIME_BEFORE(current_tick, next_big_refresh)) {
@@ -691,8 +712,10 @@ int skin_wait_for_action(enum skinnable_screens skin, int context, int timeout)
                 {
                     if(skin_get_gwps(skin, i)->data->spectrum_enabled)
                         skin_update(skin, i, SKIN_REFRESH_SPECTRUM);
-                    next_refresh += HZ / SPECTRUM_FPS;
                 }
+                next_refresh += HZ / SPECTRUM_FPS;
+                if (TIME_BEFORE(next_refresh, current_tick))   /* fell behind: one catch-up frame at most */
+                    next_refresh = current_tick;
                 refreshed = true;
             }
             lcd_set_update_suppressed(false);

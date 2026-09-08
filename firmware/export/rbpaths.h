@@ -83,7 +83,13 @@
 #define CONFIGFILE          ROCKBOX_DIR "/config.cfg"
 #define FIXEDSETTINGSFILE   ROCKBOX_DIR "/fixed.cfg"
 
-#define PLAYLIST_CONTROL_FILE   ROCKBOX_DIR "/.playlist_control"
+/* Trimpod: the live control journal is kept in tmpfs (every append is a RAM
+ * write; the card is a `sync` mount where each would cost ~15 ms).  It is
+ * copied in from PLAYLIST_CONTROL_PERSIST at playlist_init() and written back
+ * by playlist_shutdown(), which every clean exit reaches via clean_shutdown().
+ * A hard kill loses only the changes made since boot. */
+#define PLAYLIST_CONTROL_FILE    "/tmp/trimpod-playlist_control"
+#define PLAYLIST_CONTROL_PERSIST ROCKBOX_DIR "/.playlist_control"
 #define GLYPH_CACHE_FILE        ROCKBOX_DIR "/.glyphcache"
 
 #endif /* __PATHS_H__ */

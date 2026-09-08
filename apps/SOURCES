@@ -3,11 +3,9 @@ logfdisp.c
 #endif
 action.c
 abrepeat.c
-bookmark.c
 core_keymap.c
 scratch_buf.c
 filetypes.c
-fileop.c
 language.c
 main.c
 menu.c
@@ -20,10 +18,8 @@ menus/main_menu.c
 menus/power_menu.c
 menus/audio_folders_menu.c
 menus/visualizer_menu.c
-menus/playlist_menu.c
 menus/sound_menu.c
 misc.c
-onplay.c
 trimpod_transition.c
 trimpod_page.c
 trimpod_ui.c
@@ -45,7 +41,6 @@ root_menu.c
 screens.c
 settings.c
 settings_list.c
-shortcuts.c
 status.c
 cuesheet.c
 tree.c

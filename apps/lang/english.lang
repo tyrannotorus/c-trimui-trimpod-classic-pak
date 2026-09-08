@@ -17336,3 +17336,451 @@
     *: "Finished"
   </voice>
 </phrase>
+<phrase>
+  id: LANG_TRIMPOD_ADD_TO_PLAY_QUEUE
+  desc: Trimpod context menu: append to the live queue
+  user: core
+  <source>
+    *: "Add to Play Queue"
+  </source>
+  <dest>
+    *: "Add to Play Queue"
+  </dest>
+  <voice>
+    *: "Add to Play Queue"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_ADD_TO_PLAYLIST
+  desc: Trimpod context menu item and picker title
+  user: core
+  <source>
+    *: "Add to Playlist"
+  </source>
+  <dest>
+    *: "Add to Playlist"
+  </dest>
+  <voice>
+    *: "Add to Playlist"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_REMOVE_FROM_PLAYLIST
+  desc: Trimpod playlist editor / viewer context menu
+  user: core
+  <source>
+    *: "Remove from Playlist"
+  </source>
+  <dest>
+    *: "Remove from Playlist"
+  </dest>
+  <voice>
+    *: "Remove from Playlist"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_PREVIEW
+  desc: Trimpod visualizer preset context menu
+  user: core
+  <source>
+    *: "Preview"
+  </source>
+  <dest>
+    *: "Preview"
+  </dest>
+  <voice>
+    *: "Preview"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_OVERWRITE_PLAYLIST_Q
+  desc: Trimpod confirm: new playlist name already exists
+  user: core
+  <source>
+    *: "Overwrite playlist?"
+  </source>
+  <dest>
+    *: "Overwrite playlist?"
+  </dest>
+  <voice>
+    *: "Overwrite playlist?"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_REMOVE_FROM_PLAYLIST_Q
+  desc: Trimpod confirm: remove a track in the editor
+  user: core
+  <source>
+    *: "Remove from playlist?"
+  </source>
+  <dest>
+    *: "Remove from playlist?"
+  </dest>
+  <voice>
+    *: "Remove from playlist?"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_DELETE_PLAYLIST_Q
+  desc: Trimpod confirm: delete a playlist
+  user: core
+  <source>
+    *: "Delete this playlist?"
+  </source>
+  <dest>
+    *: "Delete this playlist?"
+  </dest>
+  <voice>
+    *: "Delete this playlist?"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_REMOVE_FOLDER_Q
+  desc: Trimpod confirm: remove a library folder
+  user: core
+  <source>
+    *: "Remove this folder?"
+  </source>
+  <dest>
+    *: "Remove this folder?"
+  </dest>
+  <voice>
+    *: "Remove this folder?"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_CONFIRM_LEGEND
+  desc: Trimpod confirm page button line
+  user: core
+  <source>
+    *: "Cancel (B)      OK (A)"
+  </source>
+  <dest>
+    *: "Cancel (B)      OK (A)"
+  </dest>
+  <voice>
+    *: "Cancel (B)      OK (A)"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_PLAYLIST_CREATE_FAILED
+  desc: Trimpod splash
+  user: core
+  <source>
+    *: "Could not create playlist"
+  </source>
+  <dest>
+    *: "Could not create playlist"
+  </dest>
+  <voice>
+    *: "Could not create playlist"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_PLAYLIST_EDIT_FAILED
+  desc: Trimpod splash: no buffer for the editor
+  user: core
+  <source>
+    *: "Cannot edit playlist"
+  </source>
+  <dest>
+    *: "Cannot edit playlist"
+  </dest>
+  <voice>
+    *: "Cannot edit playlist"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_PLAYLIST_LOAD_FAILED
+  desc: Trimpod splash
+  user: core
+  <source>
+    *: "Cannot load playlist"
+  </source>
+  <dest>
+    *: "Cannot load playlist"
+  </dest>
+  <voice>
+    *: "Cannot load playlist"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_NAME_EXISTS
+  desc: Trimpod splash: rename target exists
+  user: core
+  <source>
+    *: "Name already exists"
+  </source>
+  <dest>
+    *: "Name already exists"
+  </dest>
+  <voice>
+    *: "Name already exists"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_RENAME_FAILED
+  desc: Trimpod splash
+  user: core
+  <source>
+    *: "Rename failed"
+  </source>
+  <dest>
+    *: "Rename failed"
+  </dest>
+  <voice>
+    *: "Rename failed"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_ADDED_TO_PLAYLIST
+  desc: Trimpod splash after a playlist pick
+  user: core
+  <source>
+    *: "Added to playlist"
+  </source>
+  <dest>
+    *: "Added to playlist"
+  </dest>
+  <voice>
+    *: "Added to playlist"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_PLAYLIST_EMPTY
+  desc: Trimpod splash and empty-playlist page
+  user: core
+  <source>
+    *: "Playlist is empty"
+  </source>
+  <dest>
+    *: "Playlist is empty"
+  </dest>
+  <voice>
+    *: "Playlist is empty"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_PLAYLIST_EMPTY_HINT1
+  desc: Trimpod empty-playlist page, line 2
+  user: core
+  <source>
+    *: "Hold A on any song"
+  </source>
+  <dest>
+    *: "Hold A on any song"
+  </dest>
+  <voice>
+    *: "Hold A on any song"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_PLAYLIST_EMPTY_HINT2
+  desc: Trimpod empty-playlist page, line 3
+  user: core
+  <source>
+    *: "to add it to a playlist"
+  </source>
+  <dest>
+    *: "to add it to a playlist"
+  </dest>
+  <voice>
+    *: "to add it to a playlist"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_FOLDER_ADD_FAILED
+  desc: Trimpod splash: library folder not added
+  user: core
+  <source>
+    *: "Already added or list full"
+  </source>
+  <dest>
+    *: "Already added or list full"
+  </dest>
+  <voice>
+    *: "Already added or list full"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_ADD_FOLDER
+  desc: Trimpod folder picker title
+  user: core
+  <source>
+    *: "Add Folder"
+  </source>
+  <dest>
+    *: "Add Folder"
+  </dest>
+  <voice>
+    *: "Add Folder"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_ADD_FOLDER_ROW
+  desc: Trimpod folders settings page: last row
+  user: core
+  <source>
+    *: "+ Add Folder"
+  </source>
+  <dest>
+    *: "+ Add Folder"
+  </dest>
+  <voice>
+    *: "+ Add Folder"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_ADD_PLAYLIST_ROW
+  desc: Trimpod playlists page: last row
+  user: core
+  <source>
+    *: "+ Add Playlist"
+  </source>
+  <dest>
+    *: "+ Add Playlist"
+  </dest>
+  <voice>
+    *: "+ Add Playlist"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_HOLD_A_TO_ADD
+  desc: Trimpod folder picker header legend
+  user: core
+  <source>
+    *: "Hold A to add"
+  </source>
+  <dest>
+    *: "Hold A to add"
+  </dest>
+  <voice>
+    *: "Hold A to add"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_HOLD_ON
+  desc: Trimpod hold screen
+  user: core
+  <source>
+    *: "HOLD is ON"
+  </source>
+  <dest>
+    *: "HOLD is ON"
+  </dest>
+  <voice>
+    *: "HOLD is ON"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_HOLD_HINT
+  desc: Trimpod hold screen
+  user: core
+  <source>
+    *: "Flip the side switch off"
+  </source>
+  <dest>
+    *: "Flip the side switch off"
+  </dest>
+  <voice>
+    *: "Flip the side switch off"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_CTRL_BACK
+  desc: Trimpod controls page
+  user: core
+  <source>
+    *: "B - Back/Cancel"
+  </source>
+  <dest>
+    *: "B - Back/Cancel"
+  </dest>
+  <voice>
+    *: "B - Back/Cancel"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_CTRL_PLAY
+  desc: Trimpod controls page
+  user: core
+  <source>
+    *: "A - Play/Enter"
+  </source>
+  <dest>
+    *: "A - Play/Enter"
+  </dest>
+  <voice>
+    *: "A - Play/Enter"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_CTRL_CONTEXT
+  desc: Trimpod controls page
+  user: core
+  <source>
+    *: "Hold A - Context Menus"
+  </source>
+  <dest>
+    *: "Hold A - Context Menus"
+  </dest>
+  <voice>
+    *: "Hold A - Context Menus"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_CTRL_SEEK
+  desc: Trimpod controls page
+  user: core
+  <source>
+    *: "L1/R1 - Seek 10s"
+  </source>
+  <dest>
+    *: "L1/R1 - Seek 10s"
+  </dest>
+  <voice>
+    *: "L1/R1 - Seek 10s"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_CTRL_CHAPTER
+  desc: Trimpod controls page
+  user: core
+  <source>
+    *: "L2/R2 - Chapter Skip"
+  </source>
+  <dest>
+    *: "L2/R2 - Chapter Skip"
+  </dest>
+  <voice>
+    *: "L2/R2 - Chapter Skip"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_CTRL_LOCK
+  desc: Trimpod controls page
+  user: core
+  <source>
+    *: "Side Switch - Lock Buttons"
+  </source>
+  <dest>
+    *: "Side Switch - Lock Buttons"
+  </dest>
+  <voice>
+    *: "Side Switch - Lock Buttons"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_START_VISUALIZER
+  desc: Trimpod Now Playing menu item
+  user: core
+  <source>
+    *: "Start Visualizer"
+  </source>
+  <dest>
+    *: "Start Visualizer"
+  </dest>
+  <voice>
+    *: "Start Visualizer"
+  </voice>
+</phrase>

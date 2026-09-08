@@ -75,7 +75,6 @@
 #include "logdiskf.h"
 #include "bootdata.h"
 
-#include "shortcuts.h"
 
 
 #include "audio_thread.h"
@@ -243,7 +242,6 @@ static void init(void)
     tree_mem_init();
     filetype_init();
     playlist_init();
-    shortcuts_init();
 
     audio_init();
     settings_apply_skins();

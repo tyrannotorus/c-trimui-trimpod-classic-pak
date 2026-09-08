@@ -4,7 +4,7 @@
  * migrated across schema versions, never wholesale-rebuilt except when the file
  * is unreadable.  Reconcile is stat-gated: a no-change load costs one stat per
  * known directory (a blink); tags are parsed only for new/changed files.  It
- * powers Shuffle Songs (no filesystem walk) and the Artists/Albums browse. */
+ * powers Shuffle All (no filesystem walk) and the Artists/Albums browse. */
 #ifndef _TRIMPOD_LIBRARY_H
 #define _TRIMPOD_LIBRARY_H
 
@@ -21,18 +21,11 @@ void trimpod_library_close(void);
  * number of track rows inserted/updated/deleted. */
 int  trimpod_library_reconcile(bool force_full);
 
-/* Replace the current playlist with the query result; returns tracks inserted.
- * NULL browse_artist/album is a wildcard.  Caller shuffles + starts.
- * Shuffle Songs == trimpod_library_build_playlist(TP_CAT_MUSIC, NULL, NULL). */
-int  trimpod_library_build_playlist(int category, const char *browse_artist,
-                                    const char *album);
-
-/* Bulk-materialize `paths` (n entries) as the current playlist via a reusable
- * m3u + one index scan -- avoids Rockbox's slow O(n) per-track control-file
- * writes.  Stages up to TRIMPOD_MAX_FILES_IN_PLAYLIST entries beginning at
- * paths[first], wrapping (so a tapped row can lead an over-cap queue).  Caller
- * then calls playlist_start().  Returns entries staged, 0 on failure. */
-int  trimpod_library_stage_paths(char **paths, int n, int first);
+/* Shuffle All's track set: every Music path in title order, one callback per
+ * row (return false to stop).  Past TRIMPOD_MAX_FILES_IN_PLAYLIST rows it is a
+ * uniform random sample, so shuffle can reach any track. */
+void trimpod_library_music_paths(bool (*cb)(const char *path, void *ctx),
+                                 void *ctx);
 
 /* Browse enumerators: one callback per row, no size caps -- the caller owns
  * storage, so there is no arbitrary MAX to silently truncate against. */
@@ -44,7 +37,7 @@ void trimpod_library_albums(int category, const char *browse_artist,
         void (*cb)(const char *album, int year, void *ctx), void *ctx);
 /* Tracks of one album (album==NULL -> the artist's whole library; with
  * browse_artist==NULL too -> every song, the "Songs" facet).  Rows are in the
- * same order build_playlist uses, so a row index maps 1:1 to a playlist index.
+ * order the browse queues them, so a row index maps 1:1 to a playlist index.
  * `title` may be "" (untagged) -> caller falls back to path's basename. */
 void trimpod_library_tracks(int category, const char *browse_artist,
         const char *album,

@@ -90,9 +90,6 @@
 
 #define CONFIG_LCD LCD_COWOND2
 
-/* Define this if a programmable hotkey is mapped */
-#define HAVE_HOTKEY
-
 /* Hold/lock switch (Brick side toggle): blocks all input when engaged. */
 #define HAS_BUTTON_HOLD
 

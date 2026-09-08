@@ -45,7 +45,6 @@
 #include "menus/eq_menu.h"
 #include "statusbar.h"
 
-#include "onplay.h"
 #include "misc.h" /* current activity */
 
 #include "playlist.h"
@@ -364,15 +363,6 @@ struct eq_band_setting eq_defaults[EQ_NUM_BANDS] = {
     { 16000, 7, 0 },
 };
 
-static const int wps_context_menu_default =
-    HK_CTX_SET(0, HOTKEY_VIEW_PLAYLIST) /* hotkey*/
-  | HK_CTX_SET(1, HOTKEY_SHOW_TRACK_INFO)
-  | HK_CTX_SET(2, HOTKEY_DELETE)
-  | HK_CTX_SET(3, HOTKEY_ALBUMART);
-
-#ifdef HAVE_HOTKEY
-static const int tree_hotkey_default = HOTKEY_OFF;
-#endif
 
 static void eq_load_from_cfg(void *setting, char *value)
 {
@@ -1060,21 +1050,6 @@ const struct settings_list settings[] = {
 
     /* Customizable list */
     VIEWPORT_SETTING(ui_vp_config, "ui viewport"),
-
-   CUSTOM_SETTING(0, context_wps,
-                  LANG_ONPLAY_MENU_TITLE, /* lang string here is never actually used */
-                  &wps_context_menu_default, "context_wps",
-                  wps_context_menu_load_from_cfg, wps_context_menu_write_to_cfg,
-                  wps_context_menu_is_changed, wps_context_menu_set_default),
-
-#ifdef HAVE_HOTKEY
-   CUSTOM_SETTING(0, hotkey_tree,
-                  LANG_HOTKEY_FILE_BROWSER, /* lang string here is never actually used */
-                  &tree_hotkey_default, "hotkey tree",
-                  wps_context_menu_load_from_cfg, wps_context_menu_write_to_cfg,
-                  wps_context_menu_is_changed, wps_context_menu_set_default),
-
-#endif /* HAVE_HOTKEY */
 
     INT_SETTING(F_TIME_SETTING, resume_rewind, LANG_RESUME_REWIND, 0,
                 "resume rewind", UNIT_SEC, 0, 60, 5,

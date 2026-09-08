@@ -916,13 +916,7 @@ const char *get_token_value(struct gui_wps *gwps,
         case SKIN_TOKEN_LIST_NEEDS_SCROLLBAR:
             return skinlist_needs_scrollbar(gwps->display->screen_type) ? "s" : "";
         case SKIN_TOKEN_PLAYLIST_NAME:
-        {
-            /* Dotfile playlists are internal (the library's hidden
-             * .trimpod_queue): report no name, so the status bar shows a
-             * steady "Now Playing" instead of alternating with the filename. */
-            char *name = playlist_name(NULL, buf, buf_size);
-            return (name && name[0] == '.') ? NULL : name;
-        }
+            return playlist_name(NULL, buf, buf_size);
 
         case SKIN_TOKEN_PLAYLIST_POSITION:
             numeric_ret = playlist_get_display_index()+offset;

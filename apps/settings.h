@@ -43,26 +43,6 @@ struct opt_items {
 /* The values are assigned to the enums so that they correspond to */
 /* setting values in settings_list.c                               */
 
-/* Shared by all bookmark parameters */
-enum {
-    BOOKMARK_NO = 0,
-    BOOKMARK_YES = 1,
-};
-
-/* Auto create bookmark */
-enum {
-    BOOKMARK_ASK = 2,
-    BOOKMARK_RECENT_ONLY_YES = 3,
-    BOOKMARK_RECENT_ONLY_ASK = 4,
-};
-
-/* Most recent bookmark */
-enum {
-    BOOKMARK_ONE_PER_PLAYLIST = 2,
-    BOOKMARK_ONE_PER_TRACK = 3,
-};
-
-
 enum
 {
     TRIG_TYPE_STOP = 0,
@@ -312,7 +292,7 @@ struct system_status
 };
 
 #define TRIMPOD_MAX_FILES_IN_DIR      5000  /* file-browser dir cache size */
-#define TRIMPOD_MAX_FILES_IN_PLAYLIST 10000 /* max playlist entries */
+#define TRIMPOD_MAX_FILES_IN_PLAYLIST 100000 /* queue index slots (8 B each) */
 #define TRIMPOD_GLYPHS_TO_CACHE       512   /* font glyph allocation (CJK lists thrash 250) */
 
 struct user_settings
@@ -494,14 +474,6 @@ struct user_settings
     int sleeptimer_duration; /* In minutes */
 
 
-#ifdef HAVE_HOTKEY
-    /* hotkey assignments - acceptable values are in
-       hotkey_action enum in onplay.h */
-    int hotkey_tree;
-#endif
-    /* WPS context assignments - acceptable values are in
-       hotkey_action enum in onplay.h */
-    int context_wps;
     /* When resuming playback (after a stop), rewind this number of seconds */
     int resume_rewind;
 
@@ -570,7 +542,6 @@ struct user_settings
  * iPod-style prompt). Sorting is fixed to folders-first natural-alpha. */
 #define TP_SHOW_FILENAME_EXT         3              /* file browser ext display */
 #define TP_SHOW_PATH_IN_BROWSER      SHOW_PATH_CURRENT
-#define TP_BROWSE_CURRENT            true           /* follow playlist */
 #define TP_KEEP_DIRECTORY            true           /* resume last browse folder */
 #define TP_RECURSIVE_DIR_INSERT      RECURSE_ON
 #define TP_WARN_ON_ERASE             false          /* no erase-dynamic-playlist prompt */
@@ -579,9 +550,6 @@ struct user_settings
 #define TP_PL_VIEWER_INDICES         true
 #define TP_PL_VIEWER_TRACK_DISPLAY   0
 #define TP_SORT_PLAYLISTS            0              /* alpha */
-#define TP_KEEP_CURRENT_ON_REPLACE   true
-#define TP_SHOW_SHUFFLED_ADDING      true
-#define TP_SHOW_QUEUE_OPTIONS        0
 #define TP_DIRFILTER                 SHOW_SUPPORTED /* file browser show-files */
 #define TP_SORT_DIR                  SORT_ALPHA     /* folders sorted alpha */
 

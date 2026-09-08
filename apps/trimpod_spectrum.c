@@ -33,6 +33,7 @@
 #include "screen_access.h"
 #include "lcd.h"
 #include "viewport.h"
+#include "audio.h"        /* paused -> silence */
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -85,7 +86,10 @@ void trimpod_spectrum_draw(struct screen *display, struct viewport *vp)
     if (!spec_inited)
         spec_init();
 
-    unsigned got = pcm_viz_latest(pcm, SPEC_N);
+    /* paused: the tap still holds the last audio; feed silence so the bars
+     * decay instead of freezing */
+    unsigned got = (audio_status() & AUDIO_STATUS_PAUSE) ? 0
+                                                        : pcm_viz_latest(pcm, SPEC_N);
 
     /* mono mix, normalise to ~[-1,1], apply window */
     for (int n = 0; n < SPEC_N; n++)

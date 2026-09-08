@@ -28,19 +28,12 @@
 #include "system.h"
 #include "audio.h"
 #include "kernel.h"
-#include "tree.h"
 #include "logf.h"
 #include "misc.h"
-#include "screens.h"
-#include "list.h"
-#include "action.h"
-#include "lang.h"
 #include "debug.h"
-#include "settings.h"
-#include "scratch_buf.h"
 #include "playback.h"
 #include "cuesheet.h"
-#include "gui/wps.h"
+#include "gui/wps.h"             /* DEFAULT_SKIP_THRESH */
 
 #define CUE_DIR ROCKBOX_DIR "/cue"
 
@@ -422,113 +415,6 @@ int cue_find_current_track(struct cuesheet *cue, unsigned long curpos)
 }
 
 /* callback that gives list item titles for the cuesheet browser */
-static const char* list_get_name_cb(int selected_item,
-                                    void *data,
-                                    char *buffer,
-                                    size_t buffer_len)
-{
-    struct cuesheet *cue = (struct cuesheet *)data;
-
-    if (selected_item & 1)
-        strmemccpy(buffer, cue->tracks[selected_item/2].title, buffer_len);
-    else
-        snprintf(buffer, buffer_len, "%02d. %s", selected_item/2+1,
-                 cue->tracks[selected_item/2].performer);
-
-    return buffer;
-}
-
-void browse_cuesheet(struct cuesheet *cue)
-{
-    struct gui_synclist lists;
-    int action;
-    bool done = false;
-    char title[MAX_PATH];
-    int len;
-
-    struct cuesheet_file cue_file;
-    struct mp3entry *id3 = audio_current_track();
-
-    len = snprintf(title, sizeof(title), "%s: %s", cue->performer, cue->title);
-
-    if ((unsigned) len > sizeof(title))
-        title[sizeof(title) - 2] = '~'; /* give indication of truncation */
-
-
-    gui_synclist_init(&lists, list_get_name_cb, cue, false, 2, NULL);
-    gui_synclist_set_nb_items(&lists, 2*cue->track_count);
-    gui_synclist_set_title(&lists, title, 0);
-
-
-    if (id3)
-    {
-        gui_synclist_select_item(&lists,
-                                 2*cue_find_current_track(cue, id3->elapsed));
-    }
-
-    while (!done)
-    {
-        gui_synclist_draw(&lists);
-        action = get_action(CONTEXT_LIST,TIMEOUT_BLOCK);
-        if (gui_synclist_do_button(&lists, &action))
-            continue;
-        switch (action)
-        {
-            case ACTION_STD_OK:
-            {
-                bool startit = true;
-                unsigned long elapsed =
-                    cue->tracks[gui_synclist_get_sel_pos(&lists)/2].offset;
-
-                id3 = audio_current_track();
-                if (id3 && *id3->path)
-                {
-                    look_for_cuesheet_file(id3, &cue_file);
-                    if (!strcmp(cue->path, cue_file.path))
-                        startit = false;
-                }
-
-                if (!startit)
-                    startit = !seek(elapsed);
-
-                if (!startit || !*cue->file)
-                    break;
-
-                char file[MAX_PATH];
-                strmemccpy(file, cue->file, MAX_PATH);
-                char *fname = strrsplt(file, '/');
-                char *dirname = fname <= file + 1 ? "/" : file;
-                bookmark_play(dirname, 0, elapsed, 0, current_tick, fname);
-                break;
-                } /* ACTION_STD_OK */
-
-            case ACTION_STD_CANCEL:
-                done = true;
-            default:
-                break;
-        }
-    }
-}
-
-bool display_cuesheet_content(char* filename)
-{
-    size_t bufsize = 0;
-    struct cuesheet_file cue_file;
-    struct cuesheet *cue = (struct cuesheet *)scratch_buffer_get(&bufsize);
-    if (!cue || bufsize < sizeof(struct cuesheet))
-        return false;
-
-    strmemccpy(cue_file.path, filename, MAX_PATH);
-    cue_file.pos = 0;
-    cue_file.size = 0;
-
-    if (!parse_cuesheet(&cue_file, cue))
-        return false;
-
-    browse_cuesheet(cue);
-    return true;
-}
-
 /* skips backwards or forward in the current cuesheet
  * the return value indicates whether we're still in a cusheet after skipping
  * it also returns false if we weren't in a cuesheet.

@@ -74,7 +74,7 @@ struct menu_func {
 
 /* Trimpod: this item is an inline value row -- its function_param->param points
  * at a struct menu_value_cb.  do_menu shows the value right-aligned and cycles
- * it with LEFT/RIGHT (A cycles +1).  See MENUITEM_VALUE below. */
+ * it in place with A / LEFT / RIGHT.  See MENUITEM_VALUE below. */
 #define MENU_VALUE_ITEM 0x400
 
 #define MENU_COUNT_MASK 0xFFF
@@ -122,8 +122,6 @@ struct menu_item_ex {
 typedef int (*menu_callback_type)(int action,
                                   const struct menu_item_ex *this_item,
                                   struct gui_synclist *this_list);
-void do_setting_screen(const struct settings_list *setting, const char * title,
-                        struct viewport parent[NB_SCREENS]);
 
 /* 
    int do_menu(const struct menu_item_ex *menu, int *start_selected)
@@ -256,21 +254,21 @@ int do_menu(const struct menu_item_ex *menu, int *start_selected,
 
 /* Trimpod: an inline "value" row for live device knobs that are NOT
  * settings_list entries (CPU frequency, colour presets, the show/hide menu
- * toggles).  do_menu draws the value string right-aligned and cycles it with
- * LEFT/RIGHT (and A); the app supplies get()/cycle() and an opaque ctx.  Built
- * on a normal MT_FUNCTION_CALL_W_PARAM item (A calls the cycler) plus the
- * MENU_VALUE_ITEM flag that wires LEFT/RIGHT + the value display in do_menu. */
+ * toggles).  do_menu draws the value string right-aligned and cycles it in
+ * place with A / LEFT / RIGHT; the app supplies get()/cycle() and an opaque
+ * ctx.  The item is MT_FUNCTION_CALL_W_PARAM only so value_cb rides in
+ * function_param->param: do_menu handles the row inline and never calls the
+ * (NULL) function. */
 struct menu_value_cb {
     const char *(*get)(void *ctx, char *buf, int len);  /* current value string */
     void        (*cycle)(void *ctx, int dir);           /* dir -1/+1, applies live */
     void         *ctx;
 };
-int trimpod_value_item_activate(void *value_cb);        /* A -> cycle(+1); menu.c */
 
 #define MENUITEM_VALUE(name, str, value_cb, icon)                              \
     static const struct menu_callback_with_desc name##_ = {NULL, str, icon};   \
     static const struct menu_func_param name##__ =                             \
-        {{(void*)trimpod_value_item_activate}, (void*)(value_cb)};             \
+        {{NULL}, (void*)(value_cb)};                                           \
     const struct menu_item_ex name =                                           \
         {MT_FUNCTION_CALL_W_PARAM|MENU_HAS_DESC|MENU_FUNC_USEPARAM|MENU_VALUE_ITEM, \
          { .function_param = & name##__}, {.callback_and_desc = & name##_}};

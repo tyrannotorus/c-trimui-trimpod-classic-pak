@@ -24,33 +24,22 @@
 #include <kernel.h>
 #include <lcd.h>
 #include <debug.h>
-#include <font.h>
 #include <limits.h>
-#include "bookmark.h"
 #include "tree.h"
-#include "root_menu.h"
 #include "pathfuncs.h"
-#include "viewport.h"
 #include "core_alloc.h"
 #include "settings.h"
 #include "filetypes.h"
 #include "playlist.h"
 #include "lang.h"
-#include "language.h"
-#include "screens.h"
-#include "rolo.h"
 #include "splash.h"
-#include "cuesheet.h"
 #include "filetree.h"
 #include "misc.h"
-#include "audio.h"
-#include "metadata.h"
 #include "trimpod_m4b.h"
+#include "trimpod_playlists.h"   /* trimpod_resume_if_current */
 #include "strnatcmp.h"
-#include "keyboard.h"
 
 
-#include "wps.h"
 
 static struct compare_data
 {
@@ -113,30 +102,6 @@ int ft_build_playlist(struct tree_context* c, int start_index)
 
     tree_unlock_cache(c);
     return start_index;
-}
-
-/* Start playback of a playlist, checking for bookmark autoload, modified
- * playlists, etc., as required. Returns false if playback wasn't started,
- * or started via bookmark autoload, true otherwise.
- *
- * Pointers to both the full pathname and the separated parts needed to
- * avoid allocating yet another path buffer on the stack (and save some
- * code; the caller typically needs to create the full pathname anyway)...
- */
-bool ft_play_playlist(char* pathname, char* dirname, char* filename)
-{
-    int res =  bookmark_autoload(pathname);
-    if (res == BOOKMARK_CANCEL || res == BOOKMARK_DO_RESUME || !warn_on_pl_erase())
-        return false;
-
-    if (playlist_create(dirname, filename) != -1)
-    {
-        global_settings.playlist_shuffle = false;   /* normal play: file order */
-        playlist_start(0, 0, 0);
-        return true;
-    }
-
-    return false;
 }
 
 /* support function for qsort() */
@@ -210,19 +175,12 @@ int ft_load(struct tree_context* c, const char* tempdir)
     int files_in_dir = 0;
     int name_buffer_used = 0;
     struct dirent *entry;
-    bool (*callback_show_item)(char *, int, struct tree_context *) = NULL;
     DIR *dir;
 
     if (!c->is_browsing)
         c->browse = NULL;
 
-    if (tempdir)
-        dir = opendir(tempdir);
-    else
-    {
-        dir = opendir(c->currdir);
-        callback_show_item = c->browse? c->browse->callback_show_item: NULL;
-    }
+    dir = opendir(tempdir ? tempdir : c->currdir);
     if(!dir)
         return -1; /* not a directory */
 
@@ -289,8 +247,7 @@ int ft_load(struct tree_context* c, const char* tempdir)
            ((!(dir_attr) || c->dirlevel > 0)       &&
             CHK_FT(SHOW_PLUGINS, FILE_ATTR_ROCK)   &&
                        file_attr != FILE_ATTR_LUA  &&
-                       file_attr != FILE_ATTR_OPX) ||
-            (callback_show_item && !callback_show_item(entry->d_name, dptr->attr, c)))
+                       file_attr != FILE_ATTR_OPX))
         {
             continue;
         }
@@ -334,43 +291,6 @@ int ft_load(struct tree_context* c, const char* tempdir)
 
     return 0;
 }
-static void ft_load_font(char *file)
-{
-    int current_font_id;
-    enum screen_type screen = SCREEN_MAIN;
-#if NB_SCREENS > 1
-    MENUITEM_STRINGLIST(menu, ID2P(LANG_CUSTOM_FONT), NULL,
-                        ID2P(LANG_MAIN_SCREEN), ID2P(LANG_REMOTE_SCREEN))
-    switch (do_menu(&menu, NULL, NULL, false))
-    {
-        case 0: /* main lcd */
-            screen = SCREEN_MAIN;
-            set_file(file, (char *)global_settings.font_file);
-            break;
-        case 1: /* remote */
-            screen = SCREEN_REMOTE;
-            set_file(file, (char *)global_settings.remote_font_file);
-            break;
-    }
-#else
-    set_file(file, (char *)global_settings.font_file);
-#endif
-    splash(0, ID2P(LANG_WAIT));
-    current_font_id = screens[screen].getuifont();
-    if (current_font_id >= 0)
-        font_unload(current_font_id);
-    screens[screen].setuifont(
-        font_load_ex(file,0,TRIMPOD_GLYPHS_TO_CACHE));
-    viewportmanager_theme_changed(THEME_UI_VIEWPORT);
-}
-
-static void ft_apply_skin_file(char *buf, char *file)
-{
-    splash(0, ID2P(LANG_WAIT));
-    set_file(buf, file);
-    settings_apply_skins();
-}
-
 static const char *strip_slash(const char *path, const char *def)
 {
     if (path)
@@ -418,6 +338,14 @@ bool ft_play_from_context(struct tree_context* c, int sel)
     /* A file tap plays that file and goes to Now Playing. Resume-where-you-
      * left-off is the Resume Playback root entry -- except m4b audiobooks,
      * which always continue from their per-file saved position. */
+    char buf[MAX_PATH];
+    struct entry *file = tree_get_entry_at(c, sel);
+    if (file)
+        ft_assemble_path(buf, sizeof(buf), c->currdir, file->name);
+
+    /* the track already playing: show it, don't restart it */
+    if (file && trimpod_resume_if_current(buf))
+        return true;
 
     /* about to create a new current playlist... allow user to cancel */
     if (!warn_on_pl_erase())
@@ -429,37 +357,25 @@ bool ft_play_from_context(struct tree_context* c, int sel)
     int start_index = ft_build_playlist(c, sel);
 
     unsigned long resume_elapsed = 0, resume_offset = 0;
-    struct entry *file = tree_get_entry_at(c, sel);
     if (file)
-    {
-        char buf[MAX_PATH];
-        ft_assemble_path(buf, sizeof(buf), c->currdir, file->name);
         trimpod_m4b_resume_get(buf, &resume_elapsed, &resume_offset);
-    }
 
     /* Normal play is in file order -- shuffle is transient, not a persisted
        default (Shuffle Songs / Shuffle Playlist set it explicitly). */
     global_settings.playlist_shuffle = false;
     playlist_start(start_index, resume_elapsed, resume_offset);
-
-    global_status.resume_index = start_index;
-    global_status.resume_crc32 = playlist_get_filename_crc32(NULL, start_index);
-    global_status.resume_elapsed = resume_elapsed;
-    global_status.resume_offset = resume_offset;
-    status_save(false);
     return true;
 }
 
-int ft_enter(struct tree_context* c)
+void ft_enter(struct tree_context* c)
 {
-    int rc = GO_TO_PREVIOUS;
     char buf[MAX_PATH];
 
     struct entry* file = tree_get_entry_at(c, c->selected_item);
     if (!file)
     {
         splashf(HZ, ID2P(LANG_READ_FAILED), str(LANG_UNKNOWN));
-        return rc;
+        return;
     }
 
     int file_attr = file->attr;
@@ -471,124 +387,14 @@ int ft_enter(struct tree_context* c)
         c->dirlevel++;
         c->selected_item=0;
     }
-    else {
-        bool play = false;
-        int start_index=0;
-
-        switch ( file_attr & FILE_ATTR_MASK ) {
-            case FILE_ATTR_M3U:
-                play = ft_play_playlist(buf, c->currdir, file->name);
-
-                if (play)
-                {
-                    start_index = 0;
-                }
-
-                break;
-
-            case FILE_ATTR_AUDIO:
-            {
-                /* If the highlighted file is the track already playing (e.g. the
-                 * user backed out of Now Playing and re-selected it), return to
-                 * the WPS instead of restarting it from the top.  Any other file
-                 * falls through and starts normally. */
-                if (audio_status())
-                {
-                    struct mp3entry *cur = audio_current_track();
-                    if (cur && cur->path[0] && !strcmp(cur->path, buf))
-                    {
-                        rc = GO_TO_WPS;
-                        break;
-                    }
-                }
-
-                /* ft_play_from_context does the bookmark/warn/build/shuffle/
-                 * start + resume bookkeeping and returns whether it started. */
-                if (ft_play_from_context(c, c->selected_item))
-                    rc = GO_TO_WPS;
-                break;
-            }
-            case FILE_ATTR_SBS:
-                ft_apply_skin_file(buf, global_settings.sbs_file);
-                break;
-                /* wps config file */
-            case FILE_ATTR_WPS:
-                ft_apply_skin_file(buf, global_settings.wps_file);
-                break;
-            case FILE_ATTR_CFG:
-                splash(0, ID2P(LANG_WAIT));
-                if (!settings_load_config(buf,true))
-                    break;
-                splash(HZ, ID2P(LANG_SETTINGS_LOADED));
-                break;
-
-            case FILE_ATTR_BMARK:
-                splash(0, ID2P(LANG_WAIT));
-                bookmark_load(buf, false);
-                rc = GO_TO_FILEBROWSER;
-                break;
-
-            case FILE_ATTR_LNG:
-                splash(0, ID2P(LANG_WAIT));
-                if (lang_core_load(buf))
-                {
-                    splash(HZ, ID2P(LANG_FAILED));
-                    break;
-                }
-                set_file(buf, (char *)global_settings.lang_file);
-                viewportmanager_theme_changed(THEME_LANGUAGE);
-                settings_apply_skins();
-                splash(HZ, ID2P(LANG_LANGUAGE_LOADED));
-                break;
-
-            case FILE_ATTR_FONT:
-                ft_load_font(buf);
-                break;
-
-            case FILE_ATTR_KBD:
-                splash(0, ID2P(LANG_WAIT));
-                if (!load_kbd(buf))
-                    splash(HZ, ID2P(LANG_KEYBOARD_LOADED));
-                set_file(buf, (char *)global_settings.kbd_file);
-                break;
-
-            case FILE_ATTR_CUE:
-                display_cuesheet_content(buf);
-                break;
-
-                /* plugin file - plugins are not supported on this target */
-            case FILE_ATTR_ROCK:
-                break;
-
-            default:
-                /* No viewer-plugin association: non-audio files are not
-                   openable on this target. */
-                break;
-        }
-
-        if ( play ) {
-            /* the resume_index must always be the index in the
-               shuffled list in case shuffle is enabled */
-            global_status.resume_index = start_index;
-            global_status.resume_crc32 =
-                playlist_get_filename_crc32(NULL, start_index);
-            global_status.resume_elapsed = 0;
-            global_status.resume_offset = 0;
-            status_save(false);
-            rc = GO_TO_WPS;
-        }
-        else {
-            if (*c->dirfilter > NUM_FILTER_MODES &&
-                *c->dirfilter != SHOW_CFG &&
-                *c->dirfilter != SHOW_FONT &&
-                *c->dirfilter != SHOW_PLUGINS)
-            {
-                rc = GO_TO_ROOT;
-            }
-        }
+    else if ((file_attr & FILE_ATTR_MASK) == FILE_ATTR_CFG)
+    {
+        /* the one file type a Settings sub-browser (config, EQ presets) can
+         * pick; audio and playlists are browsed by Trimpod's own pages */
+        splash(0, ID2P(LANG_WAIT));
+        if (settings_load_config(buf, true))
+            splash(HZ, ID2P(LANG_SETTINGS_LOADED));
     }
-
-    return rc;
 }
 
 int ft_exit(struct tree_context* c)
