@@ -1,6 +1,6 @@
 {
   "name": "Trimpod Classic",
-  "version": "v1.0.10",
+  "version": "v1.0.11",
   "type": "TOOL",
   "description": "An iPod Classic-inspired, offline music player for the TrimUI Brick/Hammer with winamp-like visualizations.",
   "author": "tyrannotorus",
@@ -11,6 +11,7 @@
   ],
   "platforms": ["tg5040"],
   "changelog": {
+    "v1.0.11": "- Holding Power now powers the Brick off instead of rebooting it",
     "v1.0.10": "- Play Next and Add to Play Queue added to context menus\n- Idle menus return to Now Playing after 10 s\n- Holding Power powers off instead of exiting app\n- Play Queue limit increased to avoid truncated lists\n- Toggling a settings row with A no longer scrolls the list",
     "v1.0.9": "Indexing shows a Scanning Library progress screen instead of a blank screen. Adding or removing a library folder reindexes immediately. Launch after a library change no longer stalls for ~15 s.",
     "v1.0.8": "Audiobook support for .m4b files: each book resumes from where you left off, and L2/R2 skip between chapters.",

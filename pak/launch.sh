@@ -118,6 +118,11 @@ cleanup() {
   fi
   while mount 2>/dev/null | grep -q "$RBDIR_BIND"; do umount -l "$RBDIR_BIND" 2>/dev/null; done
   rmdir "$RBDIR_BIND" 2>/dev/null   # drop the empty mountpoint dir, not just the mount
+  # tg5040: power off here (shutdown.sh); NextUI's poweroff_next reboots instead.
+  if [ -f /tmp/poweroff ] && [ "$PLATFORM" = "tg5040" ] && [ -w /sys/class/axp/axp_reg ]; then
+    rm -f /tmp/poweroff
+    exec sh "$PAK_DIR/shutdown.sh"
+  fi
 }
 trap cleanup EXIT
 trap 'exit' INT TERM HUP
