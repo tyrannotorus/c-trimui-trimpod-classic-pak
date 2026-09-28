@@ -118,6 +118,14 @@ cleanup() {
   fi
   while mount 2>/dev/null | grep -q "$RBDIR_BIND"; do umount -l "$RBDIR_BIND" 2>/dev/null; done
   rmdir "$RBDIR_BIND" 2>/dev/null   # drop the empty mountpoint dir, not just the mount
+  # In-app Power Down drops /tmp/poweroff for NextUI's poweroff_next, whose process
+  # sweep makes init exit -> kernel panic -> REBOOT before its PMIC writes run.  On
+  # tg5040 power off here with MinUI's safe AXP2202 sequence (shutdown.sh) instead;
+  # other platforms keep the flag for their launcher.
+  if [ -f /tmp/poweroff ] && [ "$PLATFORM" = "tg5040" ] && [ -w /sys/class/axp/axp_reg ]; then
+    rm -f /tmp/poweroff
+    exec sh "$PAK_DIR/shutdown.sh"
+  fi
 }
 trap cleanup EXIT
 trap 'exit' INT TERM HUP
