@@ -543,7 +543,9 @@ bool gui_synclist_do_button(struct gui_synclist * lists, int *actionptr)
             int start_delay = global_settings.list_accel_start_delay * HZ;
             int accel_wait = global_settings.list_accel_wait * HZ;
 
-            if (get_action_statuscode(NULL)&ACTION_REPEAT)
+            int button;
+            if ((get_action_statuscode(&button) & ACTION_REPEAT) &&
+                (button & BUTTON_REPEAT))   /* a hold, never fast taps */
             {
                 if (!last_accel_tick)
                     last_accel_tick = current_tick + start_delay;

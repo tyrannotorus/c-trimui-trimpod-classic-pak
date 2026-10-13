@@ -38,8 +38,11 @@
  */
 
 static const struct button_mapping button_context_standard[]  = {
+    /* held UP/DOWN auto-repeat: lists scroll */
     { ACTION_STD_PREV,          BUTTON_UP,                  BUTTON_NONE },
+    { ACTION_STD_PREVREPEAT,    BUTTON_UP|BUTTON_REPEAT,    BUTTON_NONE },
     { ACTION_STD_NEXT,          BUTTON_DOWN,                BUTTON_NONE },
+    { ACTION_STD_NEXTREPEAT,    BUTTON_DOWN|BUTTON_REPEAT,  BUTTON_NONE },
     /* A (select) and B (back) fire on RELEASE, not press: a held B is what the
      * "hold = home" gesture keys off (timed in global_home_action). */
     { ACTION_STD_OK,            BUTTON_A|BUTTON_REL,        BUTTON_A },

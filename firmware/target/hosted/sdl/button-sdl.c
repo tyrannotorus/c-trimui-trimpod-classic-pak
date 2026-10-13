@@ -38,6 +38,7 @@
 
 
 static int btn = 0;    /* Hopefully keeps track of currently pressed keys... */
+static int released;   /* buttons released since the last button_read_device */
 
 
 int sdl_app_has_input_focus = 1;
@@ -310,7 +311,9 @@ void gui_message_loop(void)
         }
 
         sim_enter_irq_handler();
+        int was = btn;
         quit = event_handler(&event);
+        released |= was & ~btn;
         sim_exit_irq_handler();
 
     } while(!quit);
@@ -426,9 +429,22 @@ int button_read_device(void)
         return BUTTON_NONE;
     }
 
+    /* Every release reads as up for two polls, even if the button is already
+     * down again: button_read() drops one-poll changes, and a lost release
+     * merges fast taps into one hold that auto-repeats. */
+    static int up_mask, up_polls;
+    if (released)
+    {
+        up_mask |= released;
+        up_polls = 2;
+        released = 0;
+    }
+
     /* Volume rocker arrives as joystick buttons 14/13 (folded into btn by
      * event_handler, like every other gamepad key) -- no separate read here. */
-    int result = btn;
+    int result = btn & ~up_mask;
+    if (up_polls && --up_polls == 0)
+        up_mask = 0;
 
     /* Any non-power button wakes the screen (backlight_on() in button_tick), so
      * a manual power-blank is over -- the next power tap blanks again rather
