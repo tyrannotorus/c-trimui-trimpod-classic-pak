@@ -11,7 +11,7 @@
 /* root menu Playlists entry (a root_menu items[] function) */
 int trimpod_playlists_screen(void *param);
 
-/* Consume a pending Play/Shuffle Playlist request and start playback.  Returns
+/* Consume a pending Play/Play Shuffled request and start playback.  Returns
  * 1 (started -> go to Now Playing), 0 (nothing pending -> show the file list),
  * or -1 (empty/failed -> back to the list).  Called by root_menu.c's
  * playlist_view() so the file list ends up behind Now Playing. */
@@ -27,23 +27,33 @@ bool trimpod_playlists_take_pending_view(char *path, size_t len);
  * catalog_insert_into() -- a directory is expanded into its tracks. */
 void trimpod_playlists_pick(const char *sel, int sel_attr);
 
-/* Hold-A music context menu: Play / Play Next / Add to Play Queue / Add to
- * Playlist.  The adds are handled here; returns true when the caller should
- * play the selection.  The tracks form takes a path set (a library
- * artist/album has no single path to expand). */
+/* Hold-A music context menu: Play / Play Shuffled (not on a track) / Play Next
+ * / Add to Play Queue / Add to Playlist, all handled here.  Returns true when a
+ * Play started a new queue: the caller goes to Now Playing.  The tracks form
+ * takes a path set (a library artist/album has no single path to expand). */
 bool trimpod_music_context(const char *title, const char *path, int attr);
 bool trimpod_music_context_tracks(const char *title, char **paths, int count);
 
 /* Put a track or directory (recursive) into the live queue at `position`:
  * PLAYLIST_INSERT (after the current track), PLAYLIST_INSERT_LAST (the end)
- * or PLAYLIST_REPLACE (confirm and start a new queue from it).  Returns true
- * when the queue started playing from this call. */
-bool trimpod_queue_add(const char *path, int attr, int position);
+ * or PLAYLIST_REPLACE (confirm and start a new queue from it).  A new queue is
+ * shuffled if `shuffle`.  Returns true when the queue started playing from
+ * this call. */
+bool trimpod_queue_add(const char *path, int attr, int position, bool shuffle);
+
+/* Tap-to-play: `path` alone becomes the new queue (an m4b resumes at its saved
+ * position); the track already playing is shown, not restarted.  Returns true
+ * when it is playing (caller -> Now Playing). */
+bool trimpod_play_track(const char *path);
+
+/* Now Playing's Shuffle: a fresh random order for the whole live queue every
+ * time, played from its top (the current track stops). */
+void trimpod_queue_reshuffle(void);
 
 /* A queue build in steps: begin() opens the insert at `position`
  * (PLAYLIST_REPLACE confirms the erase and starts fresh; false = declined or
- * no control file), add_path()/add_paths() fill it, end() starts a fresh queue
- * at `start` (shuffled first if `shuffle`) and returns whether playback
+ * no control file), add_path() fills it, end() starts a fresh queue from its
+ * first track (shuffled first if `shuffle`) and returns whether playback
  * started.  add_path doubles as a trimpod_library enumerator callback
  * (false = the engine refused). */
 struct trimpod_queue
@@ -51,12 +61,11 @@ struct trimpod_queue
     struct playlist_insert_context ctx;
     bool fresh;
     int pos;
+    unsigned long elapsed, offset;   /* where the first track starts */
 };
 bool trimpod_queue_begin(struct trimpod_queue *q, int position);
 bool trimpod_queue_add_path(const char *path, void *q);
-void trimpod_queue_add_paths(struct trimpod_queue *q, char **paths, int n,
-                             int first);
-bool trimpod_queue_end(struct trimpod_queue *q, int start, bool shuffle);
+bool trimpod_queue_end(struct trimpod_queue *q, bool shuffle);
 
 /* True when `path` is the loaded track, resuming it if paused: the caller
  * shows Now Playing instead of restarting it. */

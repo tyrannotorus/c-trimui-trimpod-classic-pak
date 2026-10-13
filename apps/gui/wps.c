@@ -50,7 +50,7 @@
 #include "trimpod_transition.h"   /* slide back to the browser on B */
 #include "menu.h"                 /* do_menu / MENUITEM_VALUE (A: Now Playing menu) */
 #include "powermgmt.h"            /* sleep timer (Now Playing knob) */
-#include "trimpod_playlists.h"    /* trimpod_playlists_pick (Add to Playlist) */
+#include "trimpod_playlists.h"    /* Add to Playlist, Shuffle */
 #include "trimpod_page.h"          /* Now Playing is a trimpod_page */
 #include "backdrop.h"
 #include "appevents.h"
@@ -568,11 +568,12 @@ static int wps_page_poll(struct trimpod_page *p, int timeout)
     return button;
 }
 
-/* Hold-A on Now Playing opens this menu (do_menu returns NP_PAUSE / NP_ADD_TO_PLAYLIST /
- * NP_START_VIZ; GO_TO_PREVIOUS on cancel).  Sleep Timer is an inline knob: LEFT/RIGHT
- * (or A) cycle Off/5/10.../90 min and arm the timer live; the value shows minutes left.
- * Opened like the context menu (gwps_leave_wps -> menu -> restore) so it themes. */
-enum { NP_PAUSE = 0, NP_ADD_TO_PLAYLIST, NP_START_VIZ };
+/* Hold-A on Now Playing opens this menu (do_menu returns NP_PAUSE / NP_SHUFFLE
+ * / NP_ADD_TO_PLAYLIST / NP_START_VIZ; GO_TO_PREVIOUS on cancel).  Sleep Timer
+ * is an inline knob: LEFT/RIGHT (or A) cycle Off/5/10.../90 min and arm the
+ * timer live; the value shows minutes left.  Opened like the context menu
+ * (gwps_leave_wps -> menu -> restore) so it themes. */
+enum { NP_PAUSE = 0, NP_SHUFFLE, NP_ADD_TO_PLAYLIST, NP_START_VIZ };
 
 static const int np_sleep_min[] = { 0, 5, 10, 15, 30, 45, 60, 75, 90 };
 #define NP_SLEEP_N ((int)(sizeof np_sleep_min / sizeof np_sleep_min[0]))
@@ -632,12 +633,14 @@ static const struct menu_value_cb np_pause_value =
     { np_pause_get, np_pause_cycle, NULL };
 MENUITEM_VALUE(np_pause, "", &np_pause_value, Icon_NOICON);
 MENUITEM_VALUE(np_sleeptimer, ID2P(LANG_SLEEP_TIMER), &np_sleep_value, Icon_NOICON);
+/* Shuffle: an action, not a mode -- every pick reshuffles the live queue. */
+MENUITEM_RETURNVALUE(np_shuffle, ID2P(LANG_SHUFFLE), NP_SHUFFLE,
+                     NULL, Icon_NOICON);
 MENUITEM_RETURNVALUE(np_addpl, ID2P(LANG_TRIMPOD_ADD_TO_PLAYLIST), NP_ADD_TO_PLAYLIST,
                      NULL, Icon_NOICON);
 MENUITEM_RETURNVALUE(np_viz, ID2P(LANG_TRIMPOD_START_VISUALIZER), NP_START_VIZ, NULL, Icon_NOICON);
-/* Shuffle/Repeat: inline setting rows (LEFT/RIGHT cycle, applied live to the
- * running playlist via their settings_list callbacks); auto-labelled. */
-MENUITEM_SETTING(np_shuffle, &global_settings.playlist_shuffle, NULL);
+/* Repeat: an inline setting row (LEFT/RIGHT cycle, applied live to the
+ * running playlist via its settings_list callback); auto-labelled. */
 MENUITEM_SETTING(np_repeat, &global_settings.repeat_mode, NULL);
 MAKE_MENU(nowplaying_menu, ID2P(LANG_NOW_PLAYING), NULL, Icon_NOICON,
           &np_pause, &np_shuffle, &np_repeat, &np_sleeptimer, &np_addpl, &np_viz);
@@ -673,7 +676,12 @@ static enum trimpod_page_result wps_page_on_action(struct trimpod_page *p,
             {
                 gwps_leave_wps();
                 int sel = do_menu(&nowplaying_menu, NULL, NULL, false);
-                if (sel == NP_ADD_TO_PLAYLIST &&
+                if (sel == NP_SHUFFLE)
+                {
+                    trimpod_queue_reshuffle();
+                    trimpod_transition_arm_back();   /* slide back, as B does */
+                }
+                else if (sel == NP_ADD_TO_PLAYLIST &&
                          state->id3 && state->id3->path[0])
                     trimpod_playlists_pick(state->id3->path, FILE_ATTR_AUDIO);
                 else if (sel == NP_START_VIZ)

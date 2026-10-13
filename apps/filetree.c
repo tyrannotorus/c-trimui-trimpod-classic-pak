@@ -35,8 +35,6 @@
 #include "splash.h"
 #include "filetree.h"
 #include "misc.h"
-#include "trimpod_m4b.h"
-#include "trimpod_playlists.h"   /* trimpod_resume_if_current */
 #include "strnatcmp.h"
 
 
@@ -324,47 +322,6 @@ int ft_assemble_path(char *buf, size_t bufsz, const char* currdir, const char* f
     if (len > bufsz)
         splash(HZ, ID2P(LANG_PLAYLIST_DIRECTORY_ACCESS_ERROR));
     return (int)len;
-}
-
-/* Build the current directory of `c` into a fresh playlist and start playback
- * at entry `sel`, honoring bookmark autoload and the playlist-erase warning,
- * plus the resume bookkeeping.  Plays in file order -- shuffle is transient, so
- * a normal folder play resets it (explicit Shuffle entries set it).  Shared by
- * the stock browser (ft_enter) and the Trimpod virtual-folder browser so there
- * is exactly one folder->playlist->play path.  Returns true if playback
- * started (caller should go to the WPS). */
-bool ft_play_from_context(struct tree_context* c, int sel)
-{
-    /* A file tap plays that file and goes to Now Playing. Resume-where-you-
-     * left-off is the Resume Playback root entry -- except m4b audiobooks,
-     * which always continue from their per-file saved position. */
-    char buf[MAX_PATH];
-    struct entry *file = tree_get_entry_at(c, sel);
-    if (file)
-        ft_assemble_path(buf, sizeof(buf), c->currdir, file->name);
-
-    /* the track already playing: show it, don't restart it */
-    if (file && trimpod_resume_if_current(buf))
-        return true;
-
-    /* about to create a new current playlist... allow user to cancel */
-    if (!warn_on_pl_erase())
-        return false;
-
-    if (playlist_create(c->currdir, NULL) == -1)
-        return false;
-
-    int start_index = ft_build_playlist(c, sel);
-
-    unsigned long resume_elapsed = 0, resume_offset = 0;
-    if (file)
-        trimpod_m4b_resume_get(buf, &resume_elapsed, &resume_offset);
-
-    /* Normal play is in file order -- shuffle is transient, not a persisted
-       default (Shuffle Songs / Shuffle Playlist set it explicitly). */
-    global_settings.playlist_shuffle = false;
-    playlist_start(start_index, resume_elapsed, resume_offset);
-    return true;
 }
 
 void ft_enter(struct tree_context* c)

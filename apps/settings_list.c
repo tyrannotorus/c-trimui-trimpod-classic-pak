@@ -413,28 +413,6 @@ static void eq_set_default(void* setting, void* defaultval)
 
 
 
-/* perform shuffle/unshuffle of the current playlist based on the boolean provided */
-static void shuffle_playlist_callback(bool shuffle)
-{
-    struct playlist_info *playlist = playlist_get_current();
-    if (playlist->started)
-    {
-        if ((audio_status() & AUDIO_STATUS_PLAY) == AUDIO_STATUS_PLAY)
-        {
-            replaygain_update();
-            if (shuffle)
-            {
-                playlist_randomise(playlist, current_tick, true);
-            }
-            else
-            {
-                playlist_sort(playlist, true);
-            }
-        }
-    }
-    iap_on_shuffle_state(shuffle);
-}
-
 static void repeat_mode_callback(int repeat)
 {
     (void)repeat;
@@ -569,12 +547,6 @@ const struct settings_list settings[] = {
 #endif
 
     /* playback */
-    /* Shuffle shows On/Off (not the OFFON_SETTING default "Yes"/"No"); config
-     * still stores off_on for compatibility. */
-    BOOL_SETTING(F_CB_ON_SELECT_ONLY|F_CB_ONLY_IF_CHANGED, playlist_shuffle,
-                 LANG_SHUFFLE, false, "shuffle", off_on,
-                 LANG_ON, LANG_OFF, shuffle_playlist_callback),
-
     CHOICE_SETTING(F_CB_ON_SELECT_ONLY|F_CB_ONLY_IF_CHANGED, repeat_mode,
                    LANG_REPEAT, REPEAT_OFF, "repeat", "off,all,one"
 #ifdef AB_REPEAT_ENABLE
@@ -766,7 +738,6 @@ const struct settings_list settings[] = {
 
 #endif
     /* more playback */
-    OFFON_SETTING(0,play_selected,LANG_PLAY_SELECTED,true,"play selected",NULL),
     CHOICE_SETTING(0, single_mode, LANG_SINGLE_MODE, 0,
                   "single mode",
                   "off,track,album,album artist,artist,composer,work,genre",

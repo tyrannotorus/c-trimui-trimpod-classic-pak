@@ -7,8 +7,9 @@
  *     an empty .m3u8 and the list refreshes.
  *   A on a playlist row    -> its track listing (the playlist viewer); A on a
  *     track there starts playback from it.
- *   Hold A on a playlist   -> a Play/Shuffle/Rename/Edit/Delete context menu;
- *     Play/Shuffle start playback at once (track list sits behind Now Playing).
+ *   Hold A on a playlist   -> a Play/Play Shuffled/Add to Play Queue/Rename/
+ *     Edit/Delete context menu; the plays start at once (track list sits
+ *     behind Now Playing).
  *   B                      -> leave, back to the main menu.
  *
  * The run loop, header and key whitelist are owned by trimpod_page_run; this
@@ -44,6 +45,7 @@
 #include "trimpod_transition.h"  /* arm the back slide on the B-exit only */
 #include "trimpod_ui.h"        /* trimpod_confirm */
 #include "trimpod_keyboard.h"  /* the on-screen keyboard */
+#include "trimpod_m4b.h"       /* an m4b tap resumes at its saved position */
 #include "trimpod_playlists.h"
 
 #define PL_MAX        256
@@ -65,9 +67,10 @@ static bool pl_have_last;
  * GO_TO_PLAYLIST_VIEWER (playlist_view() in root_menu.c):
  *   view (tap A)          -> open the playlist's track listing in the viewer
  *     (trimpod_playlists_take_pending_view);
- *   play/shuffle (Hold A) -> trimpod_playlists_start_pending() begins playback
- *     so the track list sits *behind* Now Playing (backing out of the WPS
- *     reveals it).  Filename only -- the catalog dir is the stable pl_dir. */
+ *   Play/Play Shuffled (Hold A) -> trimpod_playlists_start_pending() begins
+ *     playback so the track list sits *behind* Now Playing (backing out of
+ *     the WPS reveals it).  Filename only -- the catalog dir is the stable
+ *     pl_dir. */
 static char pl_pending_file[MAX_PATH];
 static bool pl_pending_active;
 static bool pl_pending_shuffle;
@@ -436,31 +439,44 @@ bool trimpod_queue_add_path(const char *path, void *q)
     return playlist_insert_context_add(&b->ctx, path) >= 0;
 }
 
-/* paths[first..] wrapping at n, at most the cap, so a tapped row past the cap
- * can lead the queue.  Stops at the first refusal (the engine splashes). */
-void trimpod_queue_add_paths(struct trimpod_queue *q, char **paths, int n,
-                             int first)
+/* (Re)start the current playlist at its first track, shuffled first if
+ * `shuffle`: built queues, saved-playlist plays and Now Playing's Shuffle. */
+static void queue_start(bool shuffle, unsigned long elapsed,
+                        unsigned long offset)
 {
-    int cap = TRIMPOD_MAX_FILES_IN_PLAYLIST;
-    if (n < cap)
-        cap = n;
-    for (int k = 0; k < cap; k++)
-        if (!trimpod_queue_add_path(paths[(first + k) % n], q))
-            break;
+    global_settings.playlist_shuffle = shuffle;    /* the queue's order */
+    replaygain_update();                           /* track gain if shuffling */
+    if (shuffle)
+        playlist_shuffle(current_tick);
+    playlist_start(playlist_get_first_index(NULL), elapsed, offset);
 }
 
-/* A fresh queue starts playing at `start` (0 if out of range), shuffled first
- * if `shuffle`; returns whether it did.  The one start for built queues. */
-bool trimpod_queue_end(struct trimpod_queue *q, int start, bool shuffle)
+/* A fresh queue starts playing, shuffled first if `shuffle`; returns whether
+ * it did.  The one start for built queues. */
+bool trimpod_queue_end(struct trimpod_queue *q, bool shuffle)
 {
     playlist_insert_context_release(&q->ctx);
     if (!q->fresh || playlist_amount() <= 0)
         return false;
-    global_settings.playlist_shuffle = shuffle;    /* Now Playing shows it */
-    if (shuffle)
-        playlist_shuffle(current_tick, -1);
-    playlist_start(start < playlist_amount() ? start : 0, 0, 0);
+    queue_start(shuffle, q->elapsed, q->offset);
     return true;
+}
+
+bool trimpod_play_track(const char *path)
+{
+    if (trimpod_resume_if_current(path))
+        return true;
+    struct trimpod_queue q;
+    if (!trimpod_queue_begin(&q, PLAYLIST_REPLACE))
+        return false;
+    trimpod_m4b_resume_get(path, &q.elapsed, &q.offset);
+    trimpod_queue_add_path(path, &q);
+    return trimpod_queue_end(&q, false);
+}
+
+void trimpod_queue_reshuffle(void)
+{
+    queue_start(true, 0, 0);
 }
 
 /* tracksearch callback: the first audio file ends the walk */
@@ -471,7 +487,7 @@ static int first_audio_cb(char *name, void *found)
     return -1;
 }
 
-bool trimpod_queue_add(const char *path, int attr, int position)
+bool trimpod_queue_add(const char *path, int attr, int position, bool shuffle)
 {
     struct trimpod_queue q;
     bool replace = position == PLAYLIST_REPLACE;
@@ -494,16 +510,20 @@ bool trimpod_queue_add(const char *path, int attr, int position)
         playlist_insert_directory(NULL, path, q.pos, false, true, &q.ctx);
     else
         playlist_insert_context_add(&q.ctx, path);
-    return trimpod_queue_end(&q, 0, false);
+    return trimpod_queue_end(&q, shuffle);
 }
 
-static void queue_add_tracks(char **paths, int count, int position)
+/* At most the cap; stops at the first refusal (the engine splashes). */
+static bool queue_add_tracks(char **paths, int count, int position,
+                             bool shuffle)
 {
     struct trimpod_queue q;
     if (!trimpod_queue_begin(&q, position))
-        return;
-    trimpod_queue_add_paths(&q, paths, count, 0);
-    trimpod_queue_end(&q, 0, false);
+        return false;
+    for (int i = 0; i < count && i < TRIMPOD_MAX_FILES_IN_PLAYLIST; i++)
+        if (!trimpod_queue_add_path(paths[i], &q))
+            break;
+    return trimpod_queue_end(&q, shuffle);
 }
 
 static void queue_add_playlist(const char *path)
@@ -512,15 +532,16 @@ static void queue_add_playlist(const char *path)
     if (!trimpod_queue_begin(&q, PLAYLIST_INSERT_LAST))
         return;
     playlist_entries_iterate(path, &q.ctx, NULL);
-    trimpod_queue_end(&q, 0, false);
+    trimpod_queue_end(&q, false);
 }
 
 /* The per-playlist Hold-A context menu, titled with the playlist's name.
  * trimpod_context_menu returns the row index or -1 on cancel. */
-enum { PL_ACT_PLAY = 0, PL_ACT_SHUFFLE, PL_ACT_QUEUE,
+enum { PL_ACT_PLAY = 0, PL_ACT_SHUFFLED, PL_ACT_QUEUE,
        PL_ACT_RENAME, PL_ACT_EDIT, PL_ACT_DELETE };
 static const char *const playlist_action_opts[] =
-    { ID2P(LANG_PLAY), ID2P(LANG_SHUFFLE), ID2P(LANG_TRIMPOD_ADD_TO_PLAY_QUEUE),
+    { ID2P(LANG_PLAY), ID2P(LANG_TRIMPOD_PLAY_SHUFFLED),
+      ID2P(LANG_TRIMPOD_ADD_TO_PLAY_QUEUE),
       ID2P(LANG_RENAME), ID2P(LANG_EDIT), ID2P(LANG_DELETE) };
 
 /* Open the context menu for playlist `sel`; returns TRIMPOD_PAGE_DONE when a
@@ -536,7 +557,7 @@ static enum trimpod_page_result playlist_action(struct playlists_page *p, int se
     switch (act)
     {
         case PL_ACT_PLAY:
-        case PL_ACT_SHUFFLE:
+        case PL_ACT_SHUFFLED:
         {
             /* Record the pick and hand off to the root dispatch: playback starts
              * immediately (from the top, or shuffled) and slides to Now Playing,
@@ -546,7 +567,7 @@ static enum trimpod_page_result playlist_action(struct playlists_page *p, int se
             if (!warn_on_pl_erase())            /* about to replace the playlist */
                 break;                          /* declined: stay on the list */
             strlcpy(pl_pending_file, pl_namebuf + pl_off[sel], sizeof pl_pending_file);
-            pl_pending_shuffle = (act == PL_ACT_SHUFFLE);
+            pl_pending_shuffle = (act == PL_ACT_SHUFFLED);
             pl_pending_active = true;
             p->result = GO_TO_PLAYLIST_VIEWER;
             return TRIMPOD_PAGE_DONE;
@@ -737,12 +758,6 @@ static int run_playlists(struct playlists_page *p, const char *title)
     return p->base.home ? GO_TO_ROOT : p->result;
 }
 
-/* Consume a pending Play/Shuffle Playlist request (set by the action menu) and
- * start playback, mirroring the root Shuffle action: physically shuffle the
- * track order when requested, then play from the top; global_settings.playlist_
- * shuffle is left untouched.  Returns 1 when playback started (caller -> Now
- * Playing), 0 when nothing was pending (caller -> show the file list), or -1 on
- * an empty/unloadable playlist (caller -> back to the Playlists list). */
 /* Consume a pending view request (tap A on a playlist row): fill `path` with
  * the playlist's full path and return true.  playlist_view() then opens the
  * stock viewer on it -- A on a track there starts playback from that track. */
@@ -755,6 +770,10 @@ bool trimpod_playlists_take_pending_view(char *path, size_t len)
     return true;
 }
 
+/* Consume a pending Play/Play Shuffled request (set by the action menu) and
+ * play it from the top.  Returns 1 when playback started (caller -> Now
+ * Playing), 0 when nothing was pending (caller -> show the file list), or -1 on
+ * an empty/unloadable playlist (caller -> back to the Playlists list). */
 int trimpod_playlists_start_pending(void)
 {
     if (!pl_pending_active)
@@ -766,12 +785,7 @@ int trimpod_playlists_start_pending(void)
         splash(HZ, ID2P(LANG_TRIMPOD_PLAYLIST_EMPTY));
         return -1;
     }
-    /* Reflect the chosen mode in the shuffle setting so Now Playing shows it
-     * correctly (On for Shuffle Playlist, Off for Play Playlist). */
-    global_settings.playlist_shuffle = pl_pending_shuffle;
-    if (pl_pending_shuffle)
-        playlist_shuffle(current_tick, -1);
-    playlist_start(0, 0, 0);
+    queue_start(pl_pending_shuffle, 0, 0);
     return 1;
 }
 
@@ -822,23 +836,49 @@ static void trimpod_playlists_pick_tracks(char **paths, int count)
 }
 
 /* ---- shared Hold-A music context menu ------------------------------------
- * Play / Play Next / Add to Play Queue / Add to Playlist for the highlighted
- * row.  The adds are handled here; Play is returned to the caller, which owns
- * how its rows start. */
-enum { MUSIC_CTX_PLAY = 0, MUSIC_CTX_PLAY_NEXT, MUSIC_CTX_ADD_QUEUE,
-       MUSIC_CTX_ADD_PL };
-static const char *const music_ctx_opts[] =
-    { ID2P(LANG_PLAY), ID2P(LANG_PLAY_NEXT), ID2P(LANG_TRIMPOD_ADD_TO_PLAY_QUEUE),
-      ID2P(LANG_TRIMPOD_ADD_TO_PLAYLIST) };
+ * Play / Play Shuffled / Play Next / Add to Play Queue / Add to Playlist for
+ * the highlighted row; a track has no Play Shuffled.  Everything is handled
+ * here; true means a Play started a new queue (the caller -> Now Playing). */
+enum { MUSIC_CTX_PLAY = 0, MUSIC_CTX_SHUFFLED, MUSIC_CTX_PLAY_NEXT,
+       MUSIC_CTX_ADD_QUEUE, MUSIC_CTX_ADD_PL };
+
+/* The picked MUSIC_CTX_* for a set (folder, artist, album) or a track; -1 on
+ * cancel. */
+static int music_ctx_menu(const char *title, bool set)
+{
+    static const char *const set_opts[] =
+        { ID2P(LANG_PLAY), ID2P(LANG_TRIMPOD_PLAY_SHUFFLED),
+          ID2P(LANG_PLAY_NEXT), ID2P(LANG_TRIMPOD_ADD_TO_PLAY_QUEUE),
+          ID2P(LANG_TRIMPOD_ADD_TO_PLAYLIST) };
+    static const char *const track_opts[] =
+        { ID2P(LANG_PLAY), ID2P(LANG_PLAY_NEXT),
+          ID2P(LANG_TRIMPOD_ADD_TO_PLAY_QUEUE),
+          ID2P(LANG_TRIMPOD_ADD_TO_PLAYLIST) };
+    if (set)
+        return trimpod_context_menu(title, set_opts, ARRAYLEN(set_opts));
+    int row = trimpod_context_menu(title, track_opts, ARRAYLEN(track_opts));
+    return row > MUSIC_CTX_PLAY ? row + 1 : row;   /* past the missing row */
+}
 
 bool trimpod_music_context(const char *title, const char *path, int attr)
 {
-    switch (trimpod_context_menu(title, music_ctx_opts, ARRAYLEN(music_ctx_opts)))
+    bool dir = attr & ATTR_DIRECTORY;
+    switch (music_ctx_menu(title, dir))
     {
-        case MUSIC_CTX_PLAY:      return true;
-        case MUSIC_CTX_PLAY_NEXT: trimpod_queue_add(path, attr, PLAYLIST_INSERT); break;
-        case MUSIC_CTX_ADD_QUEUE: trimpod_queue_add(path, attr, PLAYLIST_INSERT_LAST); break;
-        case MUSIC_CTX_ADD_PL:    trimpod_playlists_pick(path, attr); break;
+        case MUSIC_CTX_PLAY:
+            return dir ? trimpod_queue_add(path, attr, PLAYLIST_REPLACE, false)
+                       : trimpod_play_track(path);
+        case MUSIC_CTX_SHUFFLED:
+            return trimpod_queue_add(path, attr, PLAYLIST_REPLACE, true);
+        case MUSIC_CTX_PLAY_NEXT:
+            trimpod_queue_add(path, attr, PLAYLIST_INSERT, false);
+            break;
+        case MUSIC_CTX_ADD_QUEUE:
+            trimpod_queue_add(path, attr, PLAYLIST_INSERT_LAST, false);
+            break;
+        case MUSIC_CTX_ADD_PL:
+            trimpod_playlists_pick(path, attr);
+            break;
     }
     return false;
 }
@@ -847,12 +887,21 @@ bool trimpod_music_context_tracks(const char *title, char **paths, int count)
 {
     if (count <= 0)
         return false;
-    switch (trimpod_context_menu(title, music_ctx_opts, ARRAYLEN(music_ctx_opts)))
+    switch (music_ctx_menu(title, true))
     {
-        case MUSIC_CTX_PLAY:      return true;
-        case MUSIC_CTX_PLAY_NEXT: queue_add_tracks(paths, count, PLAYLIST_INSERT); break;
-        case MUSIC_CTX_ADD_QUEUE: queue_add_tracks(paths, count, PLAYLIST_INSERT_LAST); break;
-        case MUSIC_CTX_ADD_PL:    trimpod_playlists_pick_tracks(paths, count); break;
+        case MUSIC_CTX_PLAY:
+            return queue_add_tracks(paths, count, PLAYLIST_REPLACE, false);
+        case MUSIC_CTX_SHUFFLED:
+            return queue_add_tracks(paths, count, PLAYLIST_REPLACE, true);
+        case MUSIC_CTX_PLAY_NEXT:
+            queue_add_tracks(paths, count, PLAYLIST_INSERT, false);
+            break;
+        case MUSIC_CTX_ADD_QUEUE:
+            queue_add_tracks(paths, count, PLAYLIST_INSERT_LAST, false);
+            break;
+        case MUSIC_CTX_ADD_PL:
+            trimpod_playlists_pick_tracks(paths, count);
+            break;
     }
     return false;
 }

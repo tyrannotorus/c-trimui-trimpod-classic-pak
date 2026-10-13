@@ -114,7 +114,7 @@ void playlist_init(void) INIT_ATTR;
 void playlist_shutdown(void);
 int playlist_create(const char *dir, const char *file);
 int playlist_resume(void);
-int playlist_shuffle(int random_seed, int start_index);
+void playlist_shuffle(int random_seed);
 unsigned int playlist_get_filename_crc32(struct playlist_info *playlist,
                                          int index);
 void playlist_resume_track(int start_index, unsigned int crc,
@@ -161,9 +161,6 @@ bool playlist_entries_iterate(const char *filename,
 void playlist_skip_entry(struct playlist_info *playlist, int steps);
 int playlist_delete(struct playlist_info* playlist, int index);
 int playlist_move(struct playlist_info* playlist, int index, int new_index);
-int playlist_randomise(struct playlist_info* playlist, unsigned int seed,
-                       bool start_current);
-int playlist_sort(struct playlist_info* playlist, bool start_current);
 bool playlist_modified(const struct playlist_info* playlist);
 void playlist_set_modified(struct playlist_info* playlist, bool modified);
 bool playlist_allow_dirplay(const struct playlist_info* playlist);

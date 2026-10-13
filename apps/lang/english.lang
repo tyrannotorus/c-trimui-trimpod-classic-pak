@@ -17784,3 +17784,17 @@
     *: "Start Visualizer"
   </voice>
 </phrase>
+<phrase>
+  id: LANG_TRIMPOD_PLAY_SHUFFLED
+  desc: Trimpod context menu: replace the queue with the selection, shuffled
+  user: core
+  <source>
+    *: "Play Shuffled"
+  </source>
+  <dest>
+    *: "Play Shuffled"
+  </dest>
+  <voice>
+    *: "Play Shuffled"
+  </voice>
+</phrase>

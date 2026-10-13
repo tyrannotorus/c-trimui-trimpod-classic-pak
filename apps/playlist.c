@@ -398,9 +398,6 @@ static int update_control_unlocked(struct playlist_info* playlist,
     case PLAYLIST_COMMAND_SHUFFLE:
         result = fdprintf(fd, "S:%d:%d\n", i1, i2);
         break;
-    case PLAYLIST_COMMAND_UNSHUFFLE:
-        result = fdprintf(fd, "U:%d\n", i1);
-        break;
     case PLAYLIST_COMMAND_RESET:
         result = write(fd, "R\n", 2);
         break;
@@ -1077,7 +1074,7 @@ static int create_and_play_dir(int direction, bool play_last)
         ft_build_playlist(tree_get_context(), 0);
 
         if (global_settings.playlist_shuffle)
-             playlist_shuffle(current_tick, -1);
+             playlist_shuffle(current_tick);
 
         if (play_last && direction <= 0)
             index = current_playlist.amount - 1;
@@ -1398,40 +1395,13 @@ static int remove_track_unlocked(struct playlist_info* playlist,
 }
 
 /*
- * Search for the seek track and set appropriate indices.  Used after shuffle
- * to make sure the current index is still pointing to correct track.
+ * randomly rearrange the array of indices for the playlist
  */
-static void find_and_set_playlist_index_unlocked(struct playlist_info* playlist,
-                                                 unsigned long seek)
-{
-    int i;
-
-    /* Set the index to the current song */
-    for (i=0; i<playlist->amount; i++)
-    {
-        if (playlist->indices[i] == seek)
-        {
-            playlist->index = playlist->first_index = i;
-
-            if (playlist == &current_playlist)
-                iap_on_track_playback_index(rotate_index(playlist, playlist->index), true);
-
-            break;
-        }
-    }
-}
-
-/*
- * randomly rearrange the array of indices for the playlist.  If start_current
- * is true then update the index to the new index of the current playing track
- */
-static int randomise_playlist_unlocked(struct playlist_info* playlist,
-                                       unsigned int seed, bool start_current,
-                                       bool write)
+static void randomise_playlist_unlocked(struct playlist_info* playlist,
+                                        unsigned int seed, bool write)
 {
     int count;
     int candidate;
-    unsigned long current = playlist->indices[playlist->index];
 
     /* seed 0 is used to identify sorted playlist for resume purposes */
     if (seed == 0)
@@ -1452,9 +1422,6 @@ static int randomise_playlist_unlocked(struct playlist_info* playlist,
         playlist->indices[count] = indextmp;
     }
 
-    if (start_current)
-        find_and_set_playlist_index_unlocked(playlist, current);
-
     /* indices have been moved so last insert position is no longer valid */
     playlist->last_insert_pos = -1;
 
@@ -1465,8 +1432,6 @@ static int randomise_playlist_unlocked(struct playlist_info* playlist,
         update_control_unlocked(playlist, PLAYLIST_COMMAND_SHUFFLE, seed,
             playlist->first_index, NULL, NULL, NULL);
     }
-
-    return 0;
 }
 
 /*
@@ -1497,34 +1462,16 @@ static int sort_compare_fn(const void* p1, const void* p2)
 }
 
 /*
- * Sort the array of indices for the playlist. If start_current is true then
- * set the index to the new index of the current song.
- * Also while going to unshuffled mode set the first_index to 0.
+ * Sort the array of indices for the playlist back into file order (resume).
  */
-static int sort_playlist_unlocked(struct playlist_info* playlist,
-                                  bool start_current, bool write)
+static void sort_playlist_unlocked(struct playlist_info* playlist)
 {
-    unsigned long current = playlist->indices[playlist->index];
-
     if (playlist->amount > 0)
         qsort((void*)playlist->indices, playlist->amount,
             sizeof(playlist->indices[0]), sort_compare_fn);
 
-
-    if (start_current)
-        find_and_set_playlist_index_unlocked(playlist, current);
-
     /* indices have been moved so last insert position is no longer valid */
     playlist->last_insert_pos = -1;
-
-    if (write && playlist->control_fd >= 0)
-    {
-        playlist->first_index = 0;
-        update_control_unlocked(playlist, PLAYLIST_COMMAND_UNSHUFFLE,
-            playlist->first_index, -1, NULL, NULL, NULL);
-    }
-
-    return 0;
 }
 
 /* Calculate how many steps we have to really step when skipping entries
@@ -2808,37 +2755,6 @@ const char* playlist_peek(int steps, char* buf, size_t buf_size)
 }
 
 /*
- * shuffle currently playing playlist
- *
- * TODO: Merge this with playlist_shuffle()?
- */
-int playlist_randomise(struct playlist_info* playlist, unsigned int seed,
-                       bool start_current)
-{
-    int result;
-
-    if (!playlist)
-        playlist = &current_playlist;
-
-    dc_thread_stop(playlist);
-    playlist_write_lock(playlist);
-
-    check_control(playlist);
-
-    result = randomise_playlist_unlocked(playlist, seed, start_current, true);
-    if (result != -1 && (audio_status() & AUDIO_STATUS_PLAY) &&
-        playlist->started)
-    {
-        audio_flush_and_reload_tracks();
-    }
-
-    playlist_write_unlock(playlist);
-    dc_thread_start(playlist, true);
-
-    return result;
-}
-
-/*
  * Removes all tracks, from the playlist, leaving the presently playing
  * track queued.
  */
@@ -3139,18 +3055,13 @@ int playlist_resume(void)
                         if (!sorted)
                         {
                             /* Always sort list before shuffling */
-                            sort_playlist_unlocked(playlist, false, false);
+                            sort_playlist_unlocked(playlist);
                         }
 
                         seed = atoi(strp[0]);
                         playlist->first_index = atoi(strp[1]);
 
-                        if (randomise_playlist_unlocked(playlist, seed, false,
-                                false) < 0)
-                        {
-                            result = -9;
-                            goto out;
-                        }
+                        randomise_playlist_unlocked(playlist, seed, false);
                         sorted = false;
 
                         break;
@@ -3166,13 +3077,7 @@ int playlist_resume(void)
                         }
 
                         playlist->first_index = atoi(strp[0]);
-
-                        if (sort_playlist_unlocked(playlist, false, false) < 0)
-                        {
-                            result = -11;
-                            goto out;
-                        }
-
+                        sort_playlist_unlocked(playlist);
                         sorted = true;
                         break;
                     }
@@ -3291,9 +3196,9 @@ int playlist_resume(void)
 
     if (result == 0)
     {
-        /* Shuffle is a property of the restored queue, not a persisted default:
-         * sync the setting (and the Now-Playing icon) to the resumed order.
-         * `sorted` is the reliable signal -- unshuffle doesn't clear the seed. */
+        /* Shuffle is a property of the restored queue, not a setting: sync
+         * the flag to the resumed order.  `sorted` is the reliable signal --
+         * unshuffle doesn't clear the seed. */
         global_settings.playlist_shuffle = !sorted;
     }
 
@@ -3410,28 +3315,19 @@ void playlist_set_last_shuffled_start(void)
     playlist_write_unlock(playlist);
 }
 
-/* shuffle newly created playlist using random seed. */
-int playlist_shuffle(int random_seed, int start_index)
+/* shuffle the current playlist using random seed; the caller then starts it */
+void playlist_shuffle(int random_seed)
 {
     struct playlist_info* playlist = &current_playlist;
-    bool start_current = false;
 
     dc_thread_stop(playlist);
     playlist_write_lock(playlist);
 
-    if (start_index >= 0 && global_settings.play_selected)
-    {
-        /* store the seek position before the shuffle */
-        playlist->index = playlist->first_index = start_index;
-        start_current = true;
-    }
-
-    randomise_playlist_unlocked(playlist, random_seed, start_current, true);
+    check_control(playlist);
+    randomise_playlist_unlocked(playlist, random_seed, true);
 
     playlist_write_unlock(playlist);
     dc_thread_start(playlist, true);
-
-    return playlist->index;
 }
 
 /* Marks the index of the track to be skipped that is "steps" away from
@@ -3457,28 +3353,6 @@ void playlist_skip_entry(struct playlist_info *playlist, int steps)
 
     playlist->indices[index] |= PLAYLIST_SKIPPED;
     playlist_write_unlock(playlist);
-}
-
-/* sort currently playing playlist */
-int playlist_sort(struct playlist_info* playlist, bool start_current)
-{
-    int result;
-
-    if (!playlist)
-        playlist = &current_playlist;
-
-    dc_thread_stop(playlist);
-    playlist_write_lock(playlist);
-
-    check_control(playlist);
-    result = sort_playlist_unlocked(playlist, start_current, true);
-
-    if (result != -1 && (audio_status() & AUDIO_STATUS_PLAY) && playlist->started)
-        audio_flush_and_reload_tracks();
-
-    playlist_write_unlock(playlist);
-    dc_thread_start(playlist, true);
-    return result;
 }
 
 /* start playing current playlist at specified index/offset */

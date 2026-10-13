@@ -31,7 +31,7 @@
 #include "action.h"
 #include "gui/list.h"
 #include "icon.h"
-#include "playlist.h"
+#include "audio.h"     /* audio_current_track (land on the playing song) */
 #include "misc.h"      /* push/pop_current_activity */
 #include "pathfuncs.h" /* path_basename (untagged-track fallback) */
 #include "root_menu.h" /* GO_TO_WPS / GO_TO_ROOT */
@@ -40,7 +40,7 @@
 #include "trimpod_folders.h"        /* TP_CAT_MUSIC */
 #include "trimpod_library.h"
 #include "trimpod_library_browse.h"
-#include "trimpod_playlists.h"      /* Hold-A = Add to Playlist */
+#include "trimpod_playlists.h"      /* tap-to-play, the Hold-A menu */
 #include "filetypes.h"              /* FILE_ATTR_AUDIO */
 
 /* ---- growable string list (rows collected from the enumerators) ------- */
@@ -255,46 +255,21 @@ static void lib_remember(struct lib_page *p, int sel,
     lib_resume.pending = true;
 }
 
-/* Queue `paths` and start at row `sel`; row order == playlist index.  Past the
- * engine cap, lead with `sel` and start at 0 (as ft_build_playlist does) so it
- * is always the one that plays. */
-static bool lib_play(struct lib_page *p, char **paths, int n, int sel,
-                     const char *artist, const char *album)
+/* The Tracks list's row `sel` was played (tap or Hold-A Play). */
+static void remember_track(struct lib_page *p, int sel)
 {
-    struct trimpod_queue q;
-    if (!trimpod_queue_begin(&q, PLAYLIST_REPLACE))
-        return false;
-    bool exceeds = n > TRIMPOD_MAX_FILES_IN_PLAYLIST;
-    trimpod_queue_add_paths(&q, paths, n, exceeds ? sel : 0);
-    if (!trimpod_queue_end(&q, exceeds ? 0 : sel, false))
-        return false;
-    lib_remember(p, sel, artist, album);
-    return true;
-}
-
-/* Tap on the Tracks list: p->paths is index-aligned with the rows (filled when
- * the level loaded), so no DB query runs here.  The track already playing is
- * shown, not restarted. */
-static bool play_track(struct lib_page *p, int sel)
-{
-    if (sel < 0 || sel >= p->paths.n)
-        return false;
-    const char *album = p->all_songs ? NULL : (p->album ? p->album : "");
-    if (trimpod_resume_if_current(p->paths.v[sel]))
-    {
-        lib_remember(p, sel, p->artist, album);
-        return true;
-    }
-    return lib_play(p, p->paths.v, p->paths.n, sel, p->artist, album);
+    lib_remember(p, sel, p->artist,
+                 p->all_songs ? NULL : (p->album ? p->album : ""));
 }
 
 /* Hold-A on an artist/album row: the context menu for `title` over its track
- * set; on Play the set becomes the queue (lib_play).  Frees `paths`. */
+ * set; a Play makes the set the queue.  Frees `paths`. */
 static bool ctx_play_set(struct lib_page *p, const char *title,
                          struct slist *paths, const char *artist, const char *album)
 {
-    bool started = trimpod_music_context_tracks(title, paths->v, paths->n) &&
-                   lib_play(p, paths->v, paths->n, 0, artist, album);
+    bool started = trimpod_music_context_tracks(title, paths->v, paths->n);
+    if (started)
+        lib_remember(p, 0, artist, album);
     slist_free(paths);
     return started;
 }
@@ -346,9 +321,11 @@ static enum trimpod_page_result lib_on_action(struct trimpod_page *self, int act
                 break;
             }
 
-            case LVL_TRACKS:
-                if (sel >= 0 && sel < p->rows.n && play_track(p, sel))
+            case LVL_TRACKS:                        /* paths are row-aligned */
+                if (sel >= 0 && sel < p->paths.n &&
+                    trimpod_play_track(p->paths.v[sel]))
                 {
+                    remember_track(p, sel);
                     p->result = GO_TO_WPS;          /* no arm_back: WPS slides in */
                     return TRIMPOD_PAGE_DONE;
                 }
@@ -405,8 +382,9 @@ static enum trimpod_page_result lib_on_action(struct trimpod_page *self, int act
                 if (sel < 0 || sel >= p->paths.n || !p->paths.v[sel][0])
                     break;
                 if (trimpod_music_context(p->rows.v[sel], p->paths.v[sel],
-                                          FILE_ATTR_AUDIO) && play_track(p, sel))
+                                          FILE_ATTR_AUDIO))
                 {
+                    remember_track(p, sel);
                     p->result = GO_TO_WPS;          /* no arm_back: WPS slides in */
                     return TRIMPOD_PAGE_DONE;
                 }
@@ -464,7 +442,8 @@ int trimpod_library_browse(void *param)
     }
 
     /* Returning from Now Playing into the same facet: reopen the Tracks list. */
-    if (lib_resume.pending && lib_resume.root_level == p.root_level)
+    bool back = lib_resume.pending && lib_resume.root_level == p.root_level;
+    if (back)
     {
         lib_resume.pending = false;
         p.level = LVL_TRACKS;
@@ -474,18 +453,21 @@ int trimpod_library_browse(void *param)
         if (lib_resume.album)
             set_str(&p.album, lib_resume.album);
         memcpy(p.sel_at, lib_resume.sel_at, sizeof p.sel_at);
-        if (playlist_amount() > 0)                   /* land on the playing song */
-        {
-            int idx = playlist_get_display_index() - 1;
-            if (idx >= 0)
-                p.sel_at[LVL_TRACKS] = idx;
-        }
     }
     else if (lib_resume.pending)                     /* a different facet -> drop it */
         lib_resume.pending = false;
 
     gui_synclist_init(&p.lists, lib_get_name, &p, false, 1, NULL);
     lib_load(&p);
+
+    struct mp3entry *id3 = audio_current_track();   /* land on what's playing */
+    if (back && (audio_status() & AUDIO_STATUS_PLAY) && id3)
+        for (int i = 0; i < p.paths.n; i++)
+            if (strcmp(p.paths.v[i], id3->path) == 0)
+            {
+                gui_synclist_select_item(&p.lists, i);
+                break;
+            }
 
     /* A restored Tracks list that came up empty (library changed since play)
      * falls back to this facet's root level; an empty root list means there is

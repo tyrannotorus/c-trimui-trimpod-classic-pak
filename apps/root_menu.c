@@ -137,9 +137,9 @@ static int wpsscrn(void* param)
  * which lists the catalog + a "+ Add Playlist" row; see items[] below. */
 
 /* True while the playlist viewer is being shown as the "file list" behind Now
- * Playing after a Play/Shuffle Playlist action (see playlist_view): backing out
- * of it returns to the Playlists list rather than the generic previous screen.
- * Cleared on that back-out and whenever we settle at the root menu. */
+ * Playing after a playlist's Play/Play Shuffled (see playlist_view): backing
+ * out of it returns to the Playlists list rather than the generic previous
+ * screen.  Cleared on that back-out and whenever we settle at the root menu. */
 static bool pl_owns_viewer = false;
 
 static int playlist_view(void * param)
@@ -147,7 +147,7 @@ static int playlist_view(void * param)
     (void)param;
     char viewfile[MAX_PATH];
 
-    /* A Play/Shuffle Playlist pick pending from the Playlists screen: start it
+    /* A Play/Play Shuffled pick pending from the Playlists screen: start it
      * now and slide to Now Playing, leaving this viewer as the screen behind. */
     switch (trimpod_playlists_start_pending())
     {

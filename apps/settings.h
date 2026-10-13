@@ -357,7 +357,6 @@ struct user_settings
 
     int default_codepage;   /* set default codepage for tag conversion */
     bool hold_lr_for_scroll_in_list; /* hold L/R scrolls the list left/right */
-    bool play_selected; /* Plays selected file even in shuffle mode */
     int single_mode;    /* single mode - stop after every track, album, album artist,
                            artist, composer, work, or genre */
     bool cuesheet;
@@ -409,7 +408,8 @@ struct user_settings
     bool constrain_next_folder; /* whether next_folder is constrained to
                                    directories within start_directory */
     bool fade_on_stop; /* fade on pause/unpause/stop */
-    bool playlist_shuffle;
+    bool playlist_shuffle; /* the queue is shuffled: set by whoever orders it,
+                              never saved (not in settings_list) */
     bool rewind_across_tracks;
 
     /* power settings */

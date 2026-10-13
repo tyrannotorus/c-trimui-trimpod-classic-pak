@@ -47,7 +47,7 @@
 #include "action.h"
 #include "gui/list.h"
 #include "tree.h"
-#include "filetree.h"   /* ft_load + ft_play_from_context: shared browse/play engine */
+#include "filetree.h"   /* ft_load: the stock browse engine */
 #include "root_menu.h"
 #include "misc.h"
 #include "icon.h"
@@ -473,12 +473,12 @@ static enum trimpod_page_result picker_on_action(struct trimpod_page *self,
         case ACTION_STD_OK:          /* A: open a folder, or (music) play a track */
             if (!have_sel)
                 return TRIMPOD_PAGE_STAY;
-            if (p->music && !item_isdir(p, sel))   /* a track -> play, go to WPS */
+            if (p->music && !item_isdir(p, sel))   /* a track: play it alone */
             {
+                char path[FPATH_LEN];
+                path_append(path, p->curdir, item_name(p, sel), sizeof(path));
                 browse_save_pos(p);   /* return from Now Playing lands back here */
-                /* Shared browse/play engine: builds the playlist from this same
-                 * tree_context and starts it (shuffle/bookmark/resume handled). */
-                if (ft_play_from_context(p->mctx, sel))
+                if (trimpod_play_track(path))
                 {
                     p->result = GO_TO_WPS;
                     return TRIMPOD_PAGE_DONE;
@@ -501,18 +501,20 @@ static enum trimpod_page_result picker_on_action(struct trimpod_page *self,
                     char path[FPATH_LEN];
                     path_append(path, p->curdir, item_name(p, sel), sizeof(path));
                     bool isdir = item_isdir(p, sel);
+                    browse_save_pos(p);   /* before an insert reuses mctx */
+                    /* Play: a track exactly as tapping it; a folder plays
+                     * everything under it (recursive) as the new queue. */
                     if (trimpod_music_context(item_name(p, sel), path,
                                               isdir ? ATTR_DIRECTORY : FILE_ATTR_AUDIO))
                     {
-                        /* Play: a track exactly as tapping it; a folder plays
-                         * everything under it (recursive) as the new queue. */
-                        browse_save_pos(p);
-                        if (isdir ? trimpod_queue_add(path, ATTR_DIRECTORY, PLAYLIST_REPLACE)
-                                  : ft_play_from_context(p->mctx, sel))
-                        {
-                            p->result = GO_TO_WPS;
-                            return TRIMPOD_PAGE_DONE;
-                        }
+                        p->result = GO_TO_WPS;
+                        return TRIMPOD_PAGE_DONE;
+                    }
+                    if (isdir)   /* the insert walked the folder through mctx */
+                    {
+                        strlcpy(pick_reselect, p->pos->last_sel,
+                                sizeof(pick_reselect));
+                        music_load(p);
                     }
                 }
                 return TRIMPOD_PAGE_STAY;
@@ -768,7 +770,7 @@ static const char *folder_resolve_root(struct folder_category *cat)
 }
 
 /* Browse with the stock browse engine, rendered by our picker: folders descend,
- * tracks play via ft_play_from_context, B walks up to `root` and leaves from
+ * a track tap plays that track alone, B walks up to `root` and leaves from
  * there; a fresh open lands in `start` (under root).  The global tree_context
  * is borrowed and restored.  A start with no folders/audio is shown only if
  * `show_empty`; otherwise nothing is shown and false comes back.  The page
@@ -912,7 +914,7 @@ int trimpod_shuffle_all(void *param)
     if (!trimpod_queue_begin(&q, PLAYLIST_REPLACE))   /* declined the erase */
         return GO_TO_ROOT;
     trimpod_library_music_paths(trimpod_queue_add_path, &q);
-    if (!trimpod_queue_end(&q, 0, true))              /* nothing indexed */
+    if (!trimpod_queue_end(&q, true))                 /* nothing indexed */
     {
         splash(HZ, ID2P(LANG_TRIMPOD_NO_MUSIC));
         trimpod_transition_suppress_next();   /* only a splash: don't re-slide the menu */
