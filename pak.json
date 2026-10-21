@@ -11,7 +11,7 @@
   ],
   "platforms": ["tg5040"],
   "changelog": {
-    "v1.0.13": "- Improved battery life\n- Battery indicator is less pessimistic\n- The press that wakes the screen no longer passes through",
+    "v1.0.13": "- Improved battery life\n- Battery indicator is less pessimistic\n- The press that wakes the screen no longer passes through\n- Visualizers no longer stutter at a low CPU Frequency",
     "v1.0.12": "- Selecting a song plays only that song\n- Play Shuffled added to folder, artist, album and playlist menus\n- Now Playing Shuffle reshuffles and restarts the queue each time, and is no longer saved\n- Hold up/down to scroll lists",
     "v1.0.11": "- Holding Power now powers the Brick off instead of rebooting it",
     "v1.0.10": "- Play Next and Add to Play Queue added to context menus\n- Idle menus return to Now Playing after 10 s\n- Holding Power powers off instead of exiting app\n- Play Queue limit increased to avoid truncated lists\n- Toggling a settings row with A no longer scrolls the list",

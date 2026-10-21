@@ -217,6 +217,26 @@ void retrohh_cpu_apply_saved(void)
         retrohh_cpu_set_dynamic();
 }
 
+/* The visualizer runs Dynamic whatever the choice: a low pin can't keep up
+ * with projectM. The override isn't persisted; release restores the choice. */
+static bool cpu_held_dynamic;
+
+void retrohh_cpu_hold_dynamic(void)
+{
+    if (cpu_held_dynamic || retrohh_cpu_is_dynamic())
+        return;
+    retrohh_cpu_set_dynamic();
+    cpu_held_dynamic = true;
+}
+
+void retrohh_cpu_release_dynamic(void)
+{
+    if (!cpu_held_dynamic)
+        return;
+    cpu_held_dynamic = false;
+    retrohh_cpu_apply_saved();
+}
+
 /* True when the CPU is in Dynamic mode (a scaling governor); pinned mode uses
  * "performance". */
 bool retrohh_cpu_is_dynamic(void)
