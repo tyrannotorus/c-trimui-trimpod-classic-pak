@@ -659,7 +659,7 @@ const struct settings_list settings[] = {
 #endif
 
     OFFON_SETTING(0, bl_filter_first_keypress,
-                  LANG_BACKLIGHT_FILTER_FIRST_KEYPRESS, false,
+                  LANG_BACKLIGHT_FILTER_FIRST_KEYPRESS, true,
                   "backlight filters first keypress", NULL),
 
 /** End of old RTC config block **/
