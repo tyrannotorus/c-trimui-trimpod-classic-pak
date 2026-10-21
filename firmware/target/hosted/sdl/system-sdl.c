@@ -139,6 +139,7 @@ void power_off(void)
     memset(&event, 0, sizeof(SDL_Event));
     event.type = SDL_USEREVENT;
     SDL_PushEvent(&event);
+    gui_message_loop_wake();
     /* wait for event thread to finish */
     SDL_WaitThread(evt_thread, NULL);
 
