@@ -40,7 +40,7 @@ extern "C" {
  * @return A projectM handle for the newly created instance that must be used in subsequent API calls.
  *         NULL if the instance could not be created successfully.
  */
-PROJECTM_EXPORT projectm_handle projectm_create();
+PROJECTM_EXPORT projectm_handle projectm_create(void);
 
 /**
  * @brief Destroys the given instance and frees the resources.
@@ -116,7 +116,7 @@ PROJECTM_EXPORT void projectm_get_version_components(int* major, int* minor, int
  *
  * @return The library version in the format major.minor.patch.
  */
-PROJECTM_EXPORT char* projectm_get_version_string();
+PROJECTM_EXPORT char* projectm_get_version_string(void);
 
 /**
  * @brief Returns the VCS revision from which the projectM library was built.
@@ -128,7 +128,7 @@ PROJECTM_EXPORT char* projectm_get_version_string();
  *
  * @return The VCS revision number the projectM library was built from.
  */
-PROJECTM_EXPORT char* projectm_get_vcs_version_string();
+PROJECTM_EXPORT char* projectm_get_vcs_version_string(void);
 
 #ifdef __cplusplus
 } // extern "C"

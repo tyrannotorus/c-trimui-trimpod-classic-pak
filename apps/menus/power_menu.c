@@ -48,8 +48,8 @@
 struct trimpod_theme
 {
     const char *name;
-    unsigned    bg;
-    unsigned    fg;
+    int         bg;      /* same type as global_settings.bg_color/fg_color */
+    int         fg;
 };
 
 static const struct trimpod_theme trimpod_themes[] = {
