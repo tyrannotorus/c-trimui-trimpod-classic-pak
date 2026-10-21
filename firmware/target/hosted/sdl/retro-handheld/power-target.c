@@ -68,13 +68,12 @@ static char* get_path(const char *env_key)
     return (p && *p) ? p : NULL;
 }
 
-/* The power thread asks for these every HZ/2, and each read is I2C to the PMIC
- * (measured: status ~17 interrupts, capacity ~13, usb/online ~6).  Capacity
- * moves ~1% in minutes and a plug-in may take a couple of seconds to show. */
+/* The power thread asks for these every HZ/2, but each read is I2C to the PMIC.
+ * Capacity moves ~1% in minutes; a plug-in may take a couple of seconds to show. */
 #define STATUS_REFRESH_TICKS   (2*HZ)
 #define CAPACITY_REFRESH_TICKS (10*HZ)
 
-/* True when a reading last taken at *read_at (0 = never) is due again. */
+/* True, restamping *read_at, when a reading taken then (0 = never) is due. */
 static bool refresh_due(long *read_at, long interval)
 {
     if (*read_at && TIME_BEFORE(current_tick, *read_at + interval))

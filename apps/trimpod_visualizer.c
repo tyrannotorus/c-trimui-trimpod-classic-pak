@@ -434,8 +434,8 @@ static int viz_render_thread(void *param)
 
     while (!viz_thread_stop)
     {
-        /* Dark panel (a power-key blank): its scanout is off, so a swap would
-         * wait on a vsync that never comes -- and no frame could be seen. */
+        /* Dark panel (a power-key blank): scanout is off, so a swap would wait
+         * on a vsync that never comes. */
         if (lcd_panel_is_dark())
         {
             SDL_Delay(100);

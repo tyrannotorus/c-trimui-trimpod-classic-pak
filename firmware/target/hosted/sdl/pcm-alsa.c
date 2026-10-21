@@ -798,9 +798,9 @@ static int writer_fn(void *param)
             continue;
         }
 
-        /* Idle on the dmix bus: sleep instead of feeding it silence (4.6% of a
-         * core, 23 wakeups/s).  Its slave never stops and the kernel fills it
-         * with silence, so the codec stays powered and resuming cannot click. */
+        /* Idle on the dmix bus: sleep instead of feeding it silence.  Its slave
+         * never stops and the kernel fills it with silence, so the codec stays
+         * powered and resuming cannot click. */
         if (open_shared && !dev_playing && !pending)
         {
             SDL_SemWaitTimeout(writer_wake, ROUTE_POLL_MS);

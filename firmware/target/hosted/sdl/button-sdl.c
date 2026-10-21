@@ -303,9 +303,9 @@ static bool event_handler(SDL_Event *event)
 
 
 #ifdef RETRO_HANDHELD
-/* With a joystick open SDL_WaitEvent polls every 1 ms (~900 wakeups/s idle).
- * Instead block in poll() on our own handles to the input nodes SDL reads, plus
- * a pipe that gui_message_loop_wake() writes after an SDL_PushEvent. */
+/* With a joystick open SDL_WaitEvent polls every 1 ms.  Block in poll() instead,
+ * on our own handles to the input nodes SDL reads, plus a pipe that
+ * gui_message_loop_wake() writes after an SDL_PushEvent. */
 #define MAX_INPUT_FDS 8
 static struct pollfd input_fds[MAX_INPUT_FDS + 1];
 static int num_input_fds;               /* [0] is the wake pipe */
@@ -339,9 +339,8 @@ static void open_input_fds(void)
     closedir(dir);
 }
 
-/* Sleep until input arrives, then drain our copies (SDL reads its own handles
- * when the caller pumps).  The 1s timeout still pumps events SDL queues
- * without input, e.g. the SDL_QUIT from SIGTERM. */
+/* Sleep until input arrives and drain our copies; SDL reads its own when the
+ * caller pumps.  The 1s timeout pumps what SDL queues without input (SIGTERM). */
 static void wait_for_input(void)
 {
     if (poll(input_fds, num_input_fds, 1000) <= 0)
