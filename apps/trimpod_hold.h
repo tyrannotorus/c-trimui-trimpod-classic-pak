@@ -1,8 +1,8 @@
 /***************************************************************************
  * Trimpod: the HOLD (pocket-lock) screen.
  *
- * The Brick's side switch mutes all input (button_read_device() returns
- * BUTTON_NONE while engaged), which to a new user looks like a frozen app --
+ * The Brick's side switch mutes all input but the volume rocker while engaged,
+ * which to a new user looks like a frozen app --
  * especially when Trimpod is launched with the switch ALREADY on.  So at launch
  * we show a "HOLD is ON" page instead of the main menu, and close it (-> main
  * menu) the moment the switch is released.

@@ -25,8 +25,9 @@ static void hold_draw(struct trimpod_page *self)
     trimpod_centered_message(str(LANG_TRIMPOD_HOLD_HINT), str(LANG_TRIMPOD_HOLD_ON), NULL);
 }
 
-/* Input is muted while held, so poll the switch quickly (not the HZ the loop
- * suggests) so we notice the release promptly; SYS events still flow through. */
+/* Input other than volume is muted while held, so poll the switch quickly (not
+ * the HZ the loop suggests) so we notice the release promptly; SYS events still
+ * flow through. */
 static int hold_poll(struct trimpod_page *self, int timeout)
 {
     (void)timeout;

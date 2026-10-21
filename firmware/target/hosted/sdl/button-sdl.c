@@ -514,16 +514,16 @@ int button_read_device(void)
 
     /* Brick physical hold/lock switch (gpio243): locks INPUT ONLY -- no
      * backlight_hold_changed() or skin_request_update_locked(), which would
-     * dim/flash the screen on every toggle. */
+     * dim/flash the screen on every toggle.  The volume rocker stays live, so
+     * volume works with the switch on (in a pocket). */
     hold_button_state = retrohh_hold_switch();
     if (hold_button_state)
     {
         /* The side switch reports as EV_SW SW_TABLET_MODE on the gamepad node,
          * which SDL's joystick layer ignores (it's not a button), so nothing
-         * leaks from the switch itself.  Still discard any button held across
-         * the lock edge so it can't survive into the locked state. */
-        btn = 0;
-        return BUTTON_NONE;
+         * leaks from the switch itself.  Still discard any other button held
+         * across the lock edge so it can't survive into the locked state. */
+        btn &= BUTTON_VOL_MASK;
     }
 
     /* Every release reads as up for two polls, even if the button is already
@@ -543,10 +543,10 @@ int button_read_device(void)
     if (up_polls && --up_polls == 0)
         up_mask = 0;
 
-    /* Any non-power button wakes the screen (backlight_on() in button_tick), so
-     * a manual power-blank is over -- the next power tap blanks again rather
-     * than being treated as a wake. */
-    if (result != 0)
+    /* Any button but power and volume wakes the screen (backlight_on() in
+     * button_tick), so a manual power-blank is over -- the next power tap
+     * blanks again rather than being treated as a wake. */
+    if (result & ~BUTTON_VOL_MASK)
         power_blanked = false;
 
     return result;

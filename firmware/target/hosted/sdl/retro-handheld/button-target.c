@@ -27,7 +27,7 @@
 #include "button-target.h"
 
 /* Hold/lock switch (Brick side toggle = gpio243, value 1 = engaged, same line
- * NextUI reads). Engaged -> button_read_device() returns BUTTON_NONE. */
+ * NextUI reads). Engaged -> button_read_device() passes only the volume rocker. */
 #define HOLD_SWITCH_PATH "/sys/class/gpio/gpio243/value"
 
 bool retrohh_hold_switch(void)
@@ -41,7 +41,7 @@ bool retrohh_hold_switch(void)
     char v = '0';
     if (pread(fd, &v, 1, 0) < 1)   /* sysfs: re-read from offset 0 each poll */
         return false;
-    return v == '1';               /* 1 = engaged -> block input */
+    return v == '1';               /* 1 = engaged -> lock input */
 }
 
 /* Gamepad -> Rockbox button mapping.

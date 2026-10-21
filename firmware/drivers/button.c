@@ -101,8 +101,8 @@ static bool filter_first_keypress_disabled(int button, int data)
  * blank.  Volume always passes through. */
 static bool filter_first_keypress_enabled(int button, int data)
 {
-#ifdef BUTTON_VOL_UP
-    if (!(button & ~(BUTTON_VOL_UP | BUTTON_VOL_DOWN)))
+#ifdef BUTTON_VOL_MASK
+    if (!(button & ~BUTTON_VOL_MASK))
         return filter_first_keypress_disabled(button, data);
 #endif
     if (!lcd_panel_is_dark())
@@ -110,6 +110,18 @@ static bool filter_first_keypress_enabled(int button, int data)
         return filter_first_keypress_disabled(button, data);
     }
     return true;
+}
+
+/* Trimpod: the volume rocker never wakes a dark screen; while it is lit,
+ * volume counts as activity like any other key. */
+static void button_backlight_on(int button)
+{
+#ifdef BUTTON_VOL_MASK
+    if (!(button & ~BUTTON_VOL_MASK) && lcd_panel_is_dark())
+        return;
+#endif
+    backlight_on();
+    buttonlight_on();
 }
 
 
@@ -216,19 +228,13 @@ static void button_tick(void)
                         skip_release = false;
                         post = false;
                         /* Need to post back/buttonlight_on() on repeat buttons */
-                        {
-                            backlight_on();
-                            buttonlight_on();
-                        }
+                        button_backlight_on(btn);
                     }
                 }
                 else
                 {
-                    {
-                        skip_release = keypress_filter_fn(btn, data);
-                        backlight_on();
-                        buttonlight_on();
-                    }
+                    skip_release = keypress_filter_fn(btn, data);
+                    button_backlight_on(btn);
                     post = false;
                 }
                 reset_poweroff_timer();
