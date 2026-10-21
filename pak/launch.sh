@@ -116,6 +116,13 @@ cleanup() {
     bcval=$(grep '^19:' "$BC_REGS" 2>/dev/null | awk '{print $2}')
     [ -n "$bcval" ] && printf '19 %02x\n' "$(( 0x$bcval | 2 ))" > "$BC_REGS" 2>/dev/null
   fi
+  # The app powers the panel off while dark; an exit from there must not hand
+  # NextUI a dead screen.  "enable" is a no-op on a panel that is already on.
+  if [ -n "$LCD_ON_COMMAND" ]; then
+    echo "$LCD_ON_COMMAND" > "$SYSFS_BL_COMMAND" 2>/dev/null
+    echo "$BL_NAME" > "$SYSFS_BL_NAME" 2>/dev/null
+    echo 1 > "$SYSFS_BL_START" 2>/dev/null
+  fi
   while mount 2>/dev/null | grep -q "$RBDIR_BIND"; do umount -l "$RBDIR_BIND" 2>/dev/null; done
   rmdir "$RBDIR_BIND" 2>/dev/null   # drop the empty mountpoint dir, not just the mount
   # tg5040: power off here (shutdown.sh); NextUI's poweroff_next reboots instead.

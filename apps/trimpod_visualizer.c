@@ -434,6 +434,14 @@ static int viz_render_thread(void *param)
 
     while (!viz_thread_stop)
     {
+        /* Dark panel (a power-key blank): its scanout is off, so a swap would
+         * wait on a vsync that never comes -- and no frame could be seen. */
+        if (lcd_panel_is_dark())
+        {
+            SDL_Delay(100);
+            continue;
+        }
+
         unsigned frames = pcm_viz_latest(pcm, PCM_CHUNK);
         if (frames > 0)
             projectm_pcm_add_int16(pm, pcm, frames, PROJECTM_STEREO);

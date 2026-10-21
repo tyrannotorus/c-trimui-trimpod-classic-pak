@@ -10,5 +10,8 @@ export SYSFS_BL_PARAM="/sys/kernel/debug/dispdbg/param"
 export SYSFS_BL_START="/sys/kernel/debug/dispdbg/start"
 export BL_COMMAND="setbl"
 export BL_NAME="lcd0"
+# Panel power while dark (stops the scanout; launch.sh re-enables on exit)
+export LCD_OFF_COMMAND="disable"
+export LCD_ON_COMMAND="enable"
 # Zoom value
 ZOOMVAL="3.2"
