@@ -65,6 +65,8 @@
 
 /* Audio tap implemented in firmware/target/hosted/sdl/pcm-alsa.c */
 extern unsigned pcm_viz_latest(int16_t *out, unsigned max_frames);
+extern void retrohh_cpu_hold_dynamic(void);     /* power-target.c owns CPU policy */
+extern void retrohh_cpu_release_dynamic(void);
 
 /* projectM renders at 1/4 screen resolution into an offscreen FBO, which is then
  * nearest-neighbour upscaled to fill the window.  Our libprojectM is patched to
@@ -434,6 +436,14 @@ static int viz_render_thread(void *param)
 
     while (!viz_thread_stop)
     {
+        /* Dark panel (a power-key blank): scanout is off, so a swap would wait
+         * on a vsync that never comes. */
+        if (lcd_panel_is_dark())
+        {
+            SDL_Delay(100);
+            continue;
+        }
+
         unsigned frames = pcm_viz_latest(pcm, PCM_CHUNK);
         if (frames > 0)
             projectm_pcm_add_int16(pm, pcm, frames, PROJECTM_STEREO);
@@ -503,9 +513,11 @@ static int viz_render_thread(void *param)
 static void visualizer_session(const char *locked_path)
 {
     viz_locked = locked_path != NULL;
+    retrohh_cpu_hold_dynamic();   /* Dynamic for the session, init included */
 
     if (!ensure_init())
     {
+        retrohh_cpu_release_dynamic();
         trimpod_viz_active = false;   /* the entry fade may have set it */
         viz_entry_faded = false;
         /* undo the entry fade's Auto-Screen-Off freeze (no-op without a fade) */
@@ -589,6 +601,7 @@ static void visualizer_session(const char *locked_path)
 
     projectm_set_preset_locked(pm, false);
     trimpod_viz_active = false;
+    retrohh_cpu_release_dynamic();   /* back to the user's CPU Frequency */
     /* Restore Auto Screen Off.  If a power short press blanked us, restore it
      * silently -- the normal setter's backlight-on would flash Now Playing before
      * we re-blank.  Stay dark; the repaint below lands behind it. */

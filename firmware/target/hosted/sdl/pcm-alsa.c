@@ -151,8 +151,10 @@ static size_t pcm_size;
 static pthread_mutex_t pcm_mtx;
 
 static SDL_Thread *writer_thread;
+static SDL_sem *writer_wake;        /* posted on play and shutdown */
 static volatile bool writer_run;
 static volatile bool dev_playing;   /* Rockbox has handed us a buffer */
+static bool open_shared;            /* the device is the "Playback" dmix bus */
 static int cur_route;               /* sink audiomon last published */
 
 static void viz_pcm_push(const void *src_v, unsigned frames_n);
@@ -445,6 +447,7 @@ static bool dev_open(void)
     int route = TRIMPOD_SINK_SPEAKER;
     int err;
 
+    open_shared = false;
     if (route_is_bt())
         return bt_open();
 
@@ -486,6 +489,7 @@ static bool dev_open(void)
 
     trimpod_alsa_unlock();
     open_route = route;
+    open_shared = !strcmp(name, "Playback");
     route_lost_sent = false;
     fprintf(stderr, "pcm: opened %s at %u Hz (period %lu, buffer %lu)\n",
             name, real_sample_rate, (unsigned long)period_size,
@@ -574,9 +578,9 @@ static void dev_lost(const char *why)
 
 /* --- pulling audio from Rockbox (upstream copy_frames) --------------------- */
 
-/* Fill one period, padding with silence when Rockbox has nothing.  Keeping the
- * stream fed rather than stopping it avoids the click a restart makes, and is
- * what the SDL path did while paused. */
+/* Fill one period, padding with silence when Rockbox runs short.  The stream is
+ * never stopped -- a restart clicks -- so routes without the dmix bus are fed
+ * silence while idle too (see open_shared in writer_fn). */
 static void copy_frames(void)
 {
     ssize_t frames_left = period_size;
@@ -794,6 +798,15 @@ static int writer_fn(void *param)
             continue;
         }
 
+        /* Idle on the dmix bus: sleep instead of feeding it silence.  Its slave
+         * never stops and the kernel fills it with silence, so the codec stays
+         * powered and resuming cannot click. */
+        if (open_shared && !dev_playing && !pending)
+        {
+            SDL_SemWaitTimeout(writer_wake, ROUTE_POLL_MS);
+            continue;
+        }
+
         if (!writer_step(&pending))
             retry_at = SDL_GetTicks() + REOPEN_DELAY_MS;
     }
@@ -862,6 +875,7 @@ static void sink_dma_start(const void *addr, size_t size)
     pcm_data = addr;
     pcm_size = size;
     dev_playing = true;
+    SDL_SemPost(writer_wake);
 }
 
 /* Upstream snd_pcm_drain()s here.  We must not: this is reached from inside
@@ -888,6 +902,7 @@ static void sink_dma_init(void)
     last_sample_rate = hw_freq_sampr[HW_FREQ_DEFAULT];
     cur_route = trimpod_audio_sink();
 
+    writer_wake = SDL_CreateSemaphore(0);
     writer_run = true;
     writer_thread = SDL_CreateThread(writer_fn, "trimpod-pcm", NULL);
 
@@ -908,6 +923,7 @@ void pcm_alsa_shutdown(void)
         return;
 
     writer_run = false;
+    SDL_SemPost(writer_wake);
     SDL_WaitThread(writer_thread, NULL);
     writer_thread = NULL;
 }

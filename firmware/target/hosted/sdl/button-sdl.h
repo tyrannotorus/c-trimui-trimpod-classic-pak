@@ -30,6 +30,7 @@ extern int sdl_app_has_input_focus;
 
 
 bool button_hold(void);
+void gui_message_loop_wake(void);
 #undef button_init_device
 void button_init_device(void);
 #ifdef HAVE_BUTTON_DATA

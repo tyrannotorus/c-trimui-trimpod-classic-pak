@@ -39,7 +39,7 @@ extern "C" {
  *
  * @return The number of audio samples that are stored, per channel.
  */
-PROJECTM_EXPORT unsigned int projectm_pcm_get_max_samples();
+PROJECTM_EXPORT unsigned int projectm_pcm_get_max_samples(void);
 
 /**
  * @brief Adds 32-bit floating-point audio samples.

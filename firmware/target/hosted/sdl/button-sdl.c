@@ -21,6 +21,13 @@
 #include <math.h>
 #include <stdlib.h>         /* EXIT_SUCCESS */
 #include <stdio.h>
+#ifdef RETRO_HANDHELD
+#include <dirent.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <string.h>
+#include <unistd.h>
+#endif
 #include "sim-ui-defines.h"
 #include "config.h"
 #include "button.h"
@@ -295,28 +302,118 @@ static bool event_handler(SDL_Event *event)
 }
 
 
+#ifdef RETRO_HANDHELD
+/* With a joystick open SDL_WaitEvent polls every 1 ms.  Block in poll() instead,
+ * on our own handles to the input nodes SDL reads, plus a pipe that
+ * gui_message_loop_wake() writes after an SDL_PushEvent. */
+#define MAX_INPUT_FDS 8
+static struct pollfd input_fds[MAX_INPUT_FDS + 1];
+static int num_input_fds;               /* [0] is the wake pipe */
+static int wake_pipe[2] = { -1, -1 };
+
+static void open_input_fds(void)
+{
+    if (pipe(wake_pipe) < 0)
+        return;
+    for (int i = 0; i < 2; i++)
+    {
+        fcntl(wake_pipe[i], F_SETFL, O_NONBLOCK);
+        fcntl(wake_pipe[i], F_SETFD, FD_CLOEXEC);
+    }
+    input_fds[num_input_fds++] = (struct pollfd){ .fd = wake_pipe[0], .events = POLLIN };
+
+    DIR *dir = opendir("/dev/input");
+    if (!dir)
+        return;
+    struct dirent *de;
+    while ((de = readdir(dir)) && num_input_fds <= MAX_INPUT_FDS)
+    {
+        if (strncmp(de->d_name, "event", 5))
+            continue;
+        char path[64];
+        snprintf(path, sizeof path, "/dev/input/%s", de->d_name);
+        int fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+        if (fd >= 0)
+            input_fds[num_input_fds++] = (struct pollfd){ .fd = fd, .events = POLLIN };
+    }
+    closedir(dir);
+}
+
+/* Sleep until input arrives and drain our copies; SDL reads its own when the
+ * caller pumps.  The 1s timeout pumps what SDL queues without input (SIGTERM). */
+static void wait_for_input(void)
+{
+    if (poll(input_fds, num_input_fds, 1000) <= 0)
+        return;
+    for (int i = 0; i < num_input_fds; i++)
+    {
+        if (input_fds[i].revents & (POLLERR | POLLHUP | POLLNVAL))
+        {
+            close(input_fds[i].fd);     /* device gone: stop polling it */
+            input_fds[i].fd = -1;
+        }
+        else if (input_fds[i].revents & POLLIN)
+        {
+            char buf[512];
+            while (read(input_fds[i].fd, buf, sizeof buf) > 0)
+                ;
+        }
+    }
+}
+#endif /* RETRO_HANDHELD */
+
+void gui_message_loop_wake(void)
+{
+#ifdef RETRO_HANDHELD
+    if (wake_pipe[1] >= 0)
+    {
+        ssize_t n = write(wake_pipe[1], "", 1);
+        (void)n;
+    }
+#endif
+}
+
+static bool dispatch_event(SDL_Event *event)
+{
+    sim_enter_irq_handler();
+    int was = btn;
+    bool quit = event_handler(event);
+    released |= was & ~btn;
+    sim_exit_irq_handler();
+    return quit;
+}
+
 void gui_message_loop(void)
 {
     SDL_Event event;
-    bool quit;
+    bool quit = false;
 
     /* Open the gamepad here, on the same thread that pumps SDL events. */
     open_joysticks();
 
-    do {
+#ifdef RETRO_HANDHELD
+    open_input_fds();
+    if (num_input_fds > 1)
+    {
+        while (!quit)
+        {
+            while (!quit && SDL_PollEvent(&event))
+                quit = dispatch_event(&event);
+            if (!quit)
+                wait_for_input();
+        }
+    }
+#endif
+
+    while (!quit)
+    {
         /* wait for the next event */
         if(SDL_WaitEvent(&event) == 0) {
             printf("SDL_WaitEvent(): %s\n", SDL_GetError());
             break; /* error, out of here */
         }
-
-        sim_enter_irq_handler();
-        int was = btn;
-        quit = event_handler(&event);
-        released |= was & ~btn;
-        sim_exit_irq_handler();
-
-    } while(!quit);
+        quit = dispatch_event(&event);
+    }
 
     close_joysticks();
 }
@@ -417,16 +514,16 @@ int button_read_device(void)
 
     /* Brick physical hold/lock switch (gpio243): locks INPUT ONLY -- no
      * backlight_hold_changed() or skin_request_update_locked(), which would
-     * dim/flash the screen on every toggle. */
+     * dim/flash the screen on every toggle.  The volume rocker stays live, so
+     * volume works with the switch on (in a pocket). */
     hold_button_state = retrohh_hold_switch();
     if (hold_button_state)
     {
         /* The side switch reports as EV_SW SW_TABLET_MODE on the gamepad node,
          * which SDL's joystick layer ignores (it's not a button), so nothing
-         * leaks from the switch itself.  Still discard any button held across
-         * the lock edge so it can't survive into the locked state. */
-        btn = 0;
-        return BUTTON_NONE;
+         * leaks from the switch itself.  Still discard any other button held
+         * across the lock edge so it can't survive into the locked state. */
+        btn &= BUTTON_VOL_MASK;
     }
 
     /* Every release reads as up for two polls, even if the button is already
@@ -446,10 +543,10 @@ int button_read_device(void)
     if (up_polls && --up_polls == 0)
         up_mask = 0;
 
-    /* Any non-power button wakes the screen (backlight_on() in button_tick), so
-     * a manual power-blank is over -- the next power tap blanks again rather
-     * than being treated as a wake. */
-    if (result != 0)
+    /* Any button but power and volume wakes the screen (backlight_on() in
+     * button_tick), so a manual power-blank is over -- the next power tap
+     * blanks again rather than being treated as a wake. */
+    if (result & ~BUTTON_VOL_MASK)
         power_blanked = false;
 
     return result;

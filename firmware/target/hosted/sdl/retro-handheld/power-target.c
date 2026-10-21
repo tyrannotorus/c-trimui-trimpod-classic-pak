@@ -62,54 +62,72 @@ void trimui_deep_sleep(void)
 }
 #endif
 
-/* We get called multiple times per tick, let's cut that back! */
-static long last_tick = 0;
-static bool last_power = false;
-
 static char* get_path(const char *env_key)
 {
     char *p = getenv(env_key);
     return (p && *p) ? p : NULL;
 }
 
+/* The power thread asks for these every HZ/2, but each read is I2C to the PMIC.
+ * Capacity moves ~1% in minutes; a plug-in may take a couple of seconds to show. */
+#define STATUS_REFRESH_TICKS   (2*HZ)
+#define CAPACITY_REFRESH_TICKS (10*HZ)
+
+/* True, restamping *read_at, when a reading taken then (0 = never) is due. */
+static bool refresh_due(long *read_at, long interval)
+{
+    if (*read_at && TIME_BEFORE(current_tick, *read_at + interval))
+        return false;
+    *read_at = current_tick ? current_tick : 1;
+    return true;
+}
+
 bool charging_state(void)
 {
-    if ((current_tick - last_tick) > HZ/2 ) {
+    static long read_at;
+    static bool charging;
+
+    if (refresh_due(&read_at, STATUS_REFRESH_TICKS))
+    {
         char buf[12] = {0};
-        
         char *path = get_path("BATTERY_STATUS");
 
         if (path)
             sysfs_get_string(path, buf, sizeof(buf));
-
-        last_tick = current_tick;
-        last_power = (strncmp(buf, "Charging", 8) == 0);
+        charging = (strncmp(buf, "Charging", 8) == 0);
     }
-    return last_power;
+    return charging;
 }
 
 unsigned int power_input_status(void)
 {
-    int present = 0;
-    
-    char *path = get_path("POWER_STATUS");
+    static long read_at;
+    static int present;
 
-    if (path)
-        sysfs_get_int(path, &present);
+    if (refresh_due(&read_at, STATUS_REFRESH_TICKS))
+    {
+        char *path = get_path("POWER_STATUS");
 
+        present = 0;
+        if (path)
+            sysfs_get_int(path, &present);
+    }
     return present ? POWER_INPUT_USB_CHARGER : POWER_INPUT_NONE;
 }
 
 unsigned int power_get_battery_capacity(void)
 {
-    int battery_level;
+    static long read_at;
+    static int level = -1;          /* -1 = unknown, as _battery_level() reports */
 
-    char *path = get_path("CAPACITY_STATUS");
+    if (refresh_due(&read_at, CAPACITY_REFRESH_TICKS))
+    {
+        char *path = get_path("CAPACITY_STATUS");
 
-    if (path)
-        sysfs_get_int(path, &battery_level);
-
-    return battery_level;
+        if (path)
+            sysfs_get_int(path, &level);
+    }
+    return level;
 }
 
 /* Trimpod: CPU frequency control (TrimUI Brick / Allwinner A133).
@@ -197,6 +215,26 @@ void retrohh_cpu_apply_saved(void)
         retrohh_cpu_set_freq(khz);
     else
         retrohh_cpu_set_dynamic();
+}
+
+/* The visualizer runs Dynamic whatever the choice: a low pin can't keep up
+ * with projectM. The override isn't persisted; release restores the choice. */
+static bool cpu_held_dynamic;
+
+void retrohh_cpu_hold_dynamic(void)
+{
+    if (cpu_held_dynamic || retrohh_cpu_is_dynamic())
+        return;
+    retrohh_cpu_set_dynamic();
+    cpu_held_dynamic = true;
+}
+
+void retrohh_cpu_release_dynamic(void)
+{
+    if (!cpu_held_dynamic)
+        return;
+    cpu_held_dynamic = false;
+    retrohh_cpu_apply_saved();
 }
 
 /* True when the CPU is in Dynamic mode (a scaling governor); pinned mode uses

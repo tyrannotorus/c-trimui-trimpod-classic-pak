@@ -29,6 +29,7 @@
 #include "kernel.h"
 #include "thread.h"
 #include "backlight.h"
+#include "lcd.h"
 #include "serial.h"
 #include "power.h"
 #include "powermgmt.h"
@@ -95,13 +96,32 @@ static bool filter_first_keypress_disabled(int button, int data)
     return false;
 }
 
+/* Trimpod: gate on the panel itself -- is_backlight_on() reads "on" whenever the
+ * timeout is 0 (Auto Screen Off = Never, the visualizer), even after a power-key
+ * blank.  Volume always passes through. */
 static bool filter_first_keypress_enabled(int button, int data)
 {
-    if (is_backlight_on(false))
+#ifdef BUTTON_VOL_MASK
+    if (!(button & ~BUTTON_VOL_MASK))
+        return filter_first_keypress_disabled(button, data);
+#endif
+    if (!lcd_panel_is_dark())
     {
         return filter_first_keypress_disabled(button, data);
     }
     return true;
+}
+
+/* Trimpod: the volume rocker never wakes a dark screen; while it is lit,
+ * volume counts as activity like any other key. */
+static void button_backlight_on(int button)
+{
+#ifdef BUTTON_VOL_MASK
+    if (!(button & ~BUTTON_VOL_MASK) && lcd_panel_is_dark())
+        return;
+#endif
+    backlight_on();
+    buttonlight_on();
 }
 
 
@@ -197,26 +217,24 @@ static void button_tick(void)
             {
                 if (repeat)
                 {
+                    /* Trimpod: a swallowed wake press stays swallowed until
+                     * released, so holding it cannot start repeating. */
+                    if (skip_release)
+                        post = false;
                     /* Only post repeat events if the queue is empty,
                      * to avoid afterscroll effects. */
-                    if (button_queue_try_post(BUTTON_REPEAT | btn, data))
+                    else if (button_queue_try_post(BUTTON_REPEAT | btn, data))
                     {
                         skip_release = false;
                         post = false;
                         /* Need to post back/buttonlight_on() on repeat buttons */
-                        {
-                            backlight_on();
-                            buttonlight_on();
-                        }
+                        button_backlight_on(btn);
                     }
                 }
                 else
                 {
-                    {
-                        skip_release = keypress_filter_fn(btn, data);
-                        backlight_on();
-                        buttonlight_on();
-                    }
+                    skip_release = keypress_filter_fn(btn, data);
+                    button_backlight_on(btn);
                     post = false;
                 }
                 reset_poweroff_timer();

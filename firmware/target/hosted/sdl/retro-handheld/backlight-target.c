@@ -51,6 +51,17 @@ static void set_type1_brightness(int value) {
   sysfs_set_int(get_bl_env("SYSFS_BL_START"), 1);
 }
 
+/* LCD_ON/OFF_COMMAND (set per device in its .sys) power the panel itself:
+ * off stops the 60Hz scanout of a dark screen, on re-inits it (~300ms). */
+static void set_type1_lcd(const char *cmd_env) {
+  char *cmd = get_bl_env(cmd_env);
+  if (!cmd)
+    return;
+  sysfs_set_string(get_bl_env("SYSFS_BL_COMMAND"), cmd);
+  sysfs_set_string(get_bl_env("SYSFS_BL_NAME"), get_bl_env("BL_NAME"));
+  sysfs_set_int(get_bl_env("SYSFS_BL_START"), 1);
+}
+
 static void set_type2_brightness(int value) {
   sysfs_set_int(get_bl_env("SYSFS_BL_BRIGHTNESS"), value);
 }
@@ -88,7 +99,11 @@ static int last_bl = -1;
 void backlight_hw_on(void)
 {
     if (last_bl != 1) {
-    
+
+    /* Panel on first: the present below waits on its vsync. */
+    if (get_type() == BL_TYPE1)
+        set_type1_lcd("LCD_ON_COMMAND");
+
     /* Present BEFORE lighting the panel: the surfaces were kept current while
      * dark, so the panel comes up already showing them.  Lighting first would
      * flash the frame from when it went dark until this present landed. */
@@ -114,6 +129,8 @@ void backlight_hw_off(void)
 
 	last_bl = 0;
     lcd_set_panel_dark(true);    /* dark: stop presenting to a panel that is off */
+    if (get_type() == BL_TYPE1)
+        set_type1_lcd("LCD_OFF_COMMAND");
     }
 }
 

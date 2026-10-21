@@ -41,6 +41,7 @@
 /* Dedicated hardware volume rocker (sunxi-keyboard: KEY_VOLUMEUP/DOWN) */
 #define BUTTON_VOL_UP   0x00004000
 #define BUTTON_VOL_DOWN 0x00008000
+#define BUTTON_VOL_MASK (BUTTON_VOL_UP | BUTTON_VOL_DOWN)
 
 /* Media controls */
 #define RC_BUTTON_PLAY        0x00010000
@@ -64,7 +65,8 @@ int joybutton_to_button(int joybtn);
  * a trigger axis. */
 int joyaxis_to_button(int axis);
 
-/* Hardware hold/lock switch (Brick side toggle): true => input is blocked. */
+/* Hardware hold/lock switch (Brick side toggle): true => input but volume is
+ * blocked. */
 bool retrohh_hold_switch(void);
 
 #endif /* _BUTTON_TARGET_H_ */

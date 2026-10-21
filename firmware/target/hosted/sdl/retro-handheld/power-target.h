@@ -33,6 +33,8 @@ int  retrohh_cpu_get_freq(void);      /* current scaling_cur_freq in khz */
 bool retrohh_cpu_is_dynamic(void);    /* true unless pinned (performance) */
 void retrohh_cpu_save_choice(int khz);/* persist choice (khz<=0 -> dynamic) */
 void retrohh_cpu_apply_saved(void);   /* apply persisted choice (call at startup) */
+void retrohh_cpu_hold_dynamic(void);  /* run Dynamic over a pin (visualizer) */
+void retrohh_cpu_release_dynamic(void);/* undo the hold: re-apply the choice */
 
 /* Trimpod Charge Limit (Settings -> Power). Caps charging at a target % while
  * Trimpod runs, by toggling the AXP2202 charger bit -- in-process, no daemon.

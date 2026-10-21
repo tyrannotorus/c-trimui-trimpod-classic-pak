@@ -60,7 +60,7 @@
 
 # Battery
 %Vl(mainMenu,274,9,40,18,2)
-%?if(%bl, >, 88)<%xd(battery,5)|%?if(%bl, >, 63)<%xd(battery,4)|%?if(%bl, >, 38)<%xd(battery,3)|%?if(%bl, >, 13)<%xd(battery,2)|%xd(battery,1)>>>>
+%?if(%bl, >, 75)<%xd(battery,5)|%?if(%bl, >, 50)<%xd(battery,4)|%?if(%bl, >, 25)<%xd(battery,3)|%?if(%bl, >, 10)<%xd(battery,2)|%xd(battery,1)>>>>
 
 # Hold lock: a padlock (lock.bmp) shown just left of the battery while the side
 # switch is engaged (%mh).
@@ -95,7 +95,7 @@
 
 # Battery
 %Vl(usbScreen,274,9,40,18,2)
-%?if(%bl, >, 88)<%xd(battery,5)|%?if(%bl, >, 63)<%xd(battery,4)|%?if(%bl, >, 38)<%xd(battery,3)|%?if(%bl, >, 13)<%xd(battery,2)|%xd(battery,1)>>>>
+%?if(%bl, >, 75)<%xd(battery,5)|%?if(%bl, >, 50)<%xd(battery,4)|%?if(%bl, >, 25)<%xd(battery,3)|%?if(%bl, >, 10)<%xd(battery,2)|%xd(battery,1)>>>>
 
 # Line
 %Vl(usbScreen,5,36,310,2,-)
