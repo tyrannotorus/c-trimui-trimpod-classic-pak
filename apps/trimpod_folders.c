@@ -900,6 +900,7 @@ int trimpod_files_browse(void *param)
 int trimpod_shuffle_all(void *param)
 {
     (void)param;
+    trimpod_library_refresh_if_stale();
     folders_load(&cat_music);
 
     if (!folder_resolve_root(&cat_music))

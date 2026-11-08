@@ -415,6 +415,7 @@ static const int lib_allowed[] =
 int trimpod_library_browse(void *param)
 {
     enum trimpod_library_mode mode = (enum trimpod_library_mode)(intptr_t)param;
+    trimpod_library_refresh_if_stale();
 
     struct lib_page p =
     {

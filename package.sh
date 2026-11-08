@@ -57,7 +57,11 @@ echo ">> Overlaying the static pak files (pak/: launch.sh, licenses, config, .sy
 # pak.json lives at the repo root (the Pak Store reads it there); copy it in too.
 cp -a "$ROOT/pak/." "$PAK/"
 cp -a "$ROOT/pak.json" "$PAK/pak.json"
-chmod +x "$PAK/launch.sh" "$PAK/trimpod/trimpod"
+
+echo ">> Injecting umtprd (USB file transfer, GPL-3.0; source in lib/umtprd)"
+cp "$ROOT/build-trimpod/umtprd/umtprd" "$PAK/trimpod/umtprd"
+cp "$ROOT/lib/umtprd/LICENSE" "$PAK/licenses/umtprd_gplv3.txt"
+chmod +x "$PAK/launch.sh" "$PAK/trimpod/trimpod" "$PAK/trimpod/umtprd"
 
 echo ">> Packaging the Pak Store release asset (dist/Trimpod.pak.zip)"
 # NextUI Pak Store: the zip's ROOT must be the contents of the .pak directory

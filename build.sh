@@ -42,6 +42,12 @@ docker run --rm \
   make -j$JOBS
   # Produce the runtime zip package.sh assembles the .pak from.
   make fullzip
+  # uMTP-Responder (USB file transfer), built out of tree from lib/umtprd.
+  # cp -a keeps the sources' mtimes, so an unchanged tree doesn't rebuild.
+  cd /build
+  mkdir -p $BUILD_DIR/umtprd
+  cp -a lib/umtprd/. $BUILD_DIR/umtprd/
+  make -C $BUILD_DIR/umtprd -j$JOBS CC=\${CROSS_COMPILE}gcc umtprd
 "
 
 echo ">> Done. Binary: $BUILD_DIR/trimpod (runtime zip: $BUILD_DIR/trimpod-full.zip)"
