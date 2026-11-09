@@ -18,6 +18,7 @@
  *
  ****************************************************************************/
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
@@ -99,6 +100,99 @@ bool charging_state(void)
     return charging;
 }
 
+/* USB file transfer: umtprd runs only while USB power is present, caught on the
+ * read the power thread makes anyway.  The double fork leaves no zombie; closing
+ * our fds keeps umtprd from holding a pipe the BT aplay child needs EOF on. */
+static void usb_transfer_edge(bool plugged)
+{
+    char *script = get_path("MTP_SCRIPT");
+    long maxfd = sysconf(_SC_OPEN_MAX);
+    pid_t pid;
+
+    if (!script)
+        return;
+    pid = fork();
+    if (pid == 0)
+    {
+        if (fork() == 0)
+        {
+            for (long fd = 3; fd < maxfd; fd++)
+                close(fd);
+            execl("/bin/sh", "sh", script, plugged ? "start" : "stop",
+                  (char *)NULL);
+        }
+        _exit(0);
+    }
+    if (pid > 0)
+        waitpid(pid, NULL, 0);
+}
+
+static void cpu_hold_copy(bool on);
+
+/* A copy shows as USB interrupts, one per 512-byte packet.  Its speed follows the
+ * clock yet leaves the CPU half idle, so Dynamic never climbs: pin the CPU instead.
+ * Quiet reads bridge the gaps between files. */
+#define USB_COPY_MIN_IRQS    1000   /* per status read */
+#define USB_COPY_QUIET_READS 5      /* ~10 s */
+
+static unsigned long udc_irq_count(const char *irq_name)
+{
+    char line[256];
+    unsigned long total = 0;
+    FILE *f = fopen("/proc/interrupts", "re");
+
+    if (!f)
+        return 0;
+    while (fgets(line, sizeof line, f))
+    {
+        char *p = strchr(line, ':');
+
+        if (p && strstr(line, irq_name))
+        {
+            char *end;
+
+            p++;
+            for (unsigned long n = strtoul(p, &end, 10); end != p;
+                 n = strtoul(p, &end, 10))
+            {
+                total += n;
+                p = end;
+            }
+            break;
+        }
+    }
+    fclose(f);
+    return total;
+}
+
+static void usb_copy_track(bool plugged)
+{
+    static unsigned long last;
+    static int quiet;
+    char *irq = get_path("UDC_IRQ");
+    unsigned long now;
+
+    if (!irq)
+        return;
+    if (!plugged)
+    {
+        last = 0;
+        cpu_hold_copy(false);
+        return;
+    }
+    now = udc_irq_count(irq);
+    if (last && now - last >= USB_COPY_MIN_IRQS)
+    {
+        quiet = 0;
+        cpu_hold_copy(true);
+    }
+    else if (++quiet >= USB_COPY_QUIET_READS)
+    {
+        cpu_hold_copy(false);
+    }
+    last = now;
+}
+
 unsigned int power_input_status(void)
 {
     static long read_at;
@@ -107,12 +201,27 @@ unsigned int power_input_status(void)
     if (refresh_due(&read_at, STATUS_REFRESH_TICKS))
     {
         char *path = get_path("POWER_STATUS");
+        int now = 0;
 
-        present = 0;
         if (path)
-            sysfs_get_int(path, &present);
+            sysfs_get_int(path, &now);
+        if (!now != !present)
+            usb_transfer_edge(now);
+        present = now;
+        usb_copy_track(present);
     }
     return present ? POWER_INPUT_USB_CHARGER : POWER_INPUT_NONE;
+}
+
+/* A computer has enumerated the USB gadget (MTP/adb): the UDC reads
+ * "configured" then, never on a wall charger. */
+bool retrohh_usb_host_connected(void)
+{
+    char *path = get_path("UDC_STATE");
+    char state[16] = {0};
+
+    return path && sysfs_get_string(path, state, sizeof state)
+        && !strncmp(state, "configured", 10);
 }
 
 unsigned int power_get_battery_capacity(void)
@@ -150,7 +259,7 @@ unsigned int power_get_battery_capacity(void)
  * window to one value (scaling_min == scaling_max == khz). The `performance`
  * governor then simply holds scaling_max_freq -- which is khz, not 2 GHz -- so the
  * clock is fixed at the chosen step (no scaling up or down). */
-void retrohh_cpu_set_freq(int khz)
+static void cpu_set_freq(int khz)
 {
     if (khz <= 0)
         return;
@@ -168,7 +277,7 @@ void retrohh_cpu_set_freq(int khz)
  * (re)selected, so they are re-applied here every time: hispeed_freq caps the
  * load-jump and above_hispeed_delay slows the climb, so 30fps peak-meter bursts
  * don't spike to 2 GHz while the visualizer/decode still ramp. */
-void retrohh_cpu_set_dynamic(void)
+static void cpu_set_dynamic(void)
 {
     char gov[] = "interactive";
     sysfs_set_int(CPUFREQ_POLICY "/scaling_min_freq", CPU_FREQ_MIN_KHZ);
@@ -182,10 +291,62 @@ void retrohh_cpu_set_dynamic(void)
     sysfs_set_int(CPUFREQ_INT "/min_sample_time", 100000);
 }
 
-/* Persist the menu choice; read back by retrohh_cpu_apply_saved at next startup.
- * khz <= 0 -> "dynamic"; otherwise the pinned step in kHz. */
-void retrohh_cpu_save_choice(int khz)
+/* The user's choice in kHz (0 = Dynamic).  Holds override it without changing
+ * it; each is independent, and the choice returns only once none is active. */
+static int cpu_choice_khz;
+static unsigned cpu_holds;
+#define CPU_HOLD_VISUALIZER 1   /* Dynamic: a low pin can't keep up with projectM */
+#define CPU_HOLD_COPY       2   /* pinned, and wins: see usb_copy_track() */
+#define CPU_COPY_KHZ        1800000
+
+static void cpu_apply(void)
 {
+    if (cpu_holds & CPU_HOLD_COPY)
+        cpu_set_freq(CPU_COPY_KHZ);
+    else if ((cpu_holds & CPU_HOLD_VISUALIZER) || cpu_choice_khz <= 0)
+        cpu_set_dynamic();
+    else
+        cpu_set_freq(cpu_choice_khz);
+}
+
+static void cpu_hold(unsigned hold, bool on)
+{
+    unsigned holds = on ? (cpu_holds | hold) : (cpu_holds & ~hold);
+
+    if (holds != cpu_holds)
+    {
+        cpu_holds = holds;
+        cpu_apply();
+    }
+}
+
+static void cpu_hold_copy(bool on)
+{
+    cpu_hold(CPU_HOLD_COPY, on);
+}
+
+void retrohh_cpu_hold_dynamic(void)
+{
+    cpu_hold(CPU_HOLD_VISUALIZER, true);
+}
+
+void retrohh_cpu_release_dynamic(void)
+{
+    cpu_hold(CPU_HOLD_VISUALIZER, false);
+}
+
+int retrohh_cpu_get_choice(void)
+{
+    return cpu_choice_khz;
+}
+
+/* Menu change: persisted for retrohh_cpu_apply_saved, and live unless a hold
+ * has the CPU.  khz <= 0 -> Dynamic; otherwise the pinned step in kHz. */
+void retrohh_cpu_set_choice(int khz)
+{
+    cpu_choice_khz = khz > 0 ? khz : 0;
+    cpu_apply();
+
     int fd = open(CPU_FREQ_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd < 0)
         return;
@@ -211,47 +372,8 @@ void retrohh_cpu_apply_saved(void)
         if (r > 0)
             khz = atoi(buf);             /* "dynamic" -> 0 */
     }
-    if (khz > 0)
-        retrohh_cpu_set_freq(khz);
-    else
-        retrohh_cpu_set_dynamic();
-}
-
-/* The visualizer runs Dynamic whatever the choice: a low pin can't keep up
- * with projectM. The override isn't persisted; release restores the choice. */
-static bool cpu_held_dynamic;
-
-void retrohh_cpu_hold_dynamic(void)
-{
-    if (cpu_held_dynamic || retrohh_cpu_is_dynamic())
-        return;
-    retrohh_cpu_set_dynamic();
-    cpu_held_dynamic = true;
-}
-
-void retrohh_cpu_release_dynamic(void)
-{
-    if (!cpu_held_dynamic)
-        return;
-    cpu_held_dynamic = false;
-    retrohh_cpu_apply_saved();
-}
-
-/* True when the CPU is in Dynamic mode (a scaling governor); pinned mode uses
- * "performance". */
-bool retrohh_cpu_is_dynamic(void)
-{
-    char gov[24] = {0};
-    if (!sysfs_get_string(CPUFREQ_POLICY "/scaling_governor", gov, sizeof gov))
-        return false;
-    return gov[0] && strncmp(gov, "performance", 11) != 0;
-}
-
-int retrohh_cpu_get_freq(void)
-{
-    int khz = 0;
-    sysfs_get_int(CPUFREQ_POLICY "/scaling_cur_freq", &khz);
-    return khz;
+    cpu_choice_khz = khz > 0 ? khz : 0;
+    cpu_apply();
 }
 
 /* ---- Trimpod: Charge Limit (Settings -> Power) --------------------------- *

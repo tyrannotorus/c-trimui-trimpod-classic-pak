@@ -566,6 +566,23 @@ int trimpod_library_reconcile(bool force_full)
     return touched;
 }
 
+extern bool retrohh_usb_host_connected(void);   /* power-target.c */
+
+static bool library_stale;
+
+void trimpod_library_mark_stale(void)
+{
+    library_stale = true;
+}
+
+void trimpod_library_refresh_if_stale(void)
+{
+    /* A computer still attached may be mid-copy: wait for the unplug. */
+    if (!library_stale || retrohh_usb_host_connected()) return;
+    library_stale = false;
+    trimpod_library_reconcile(false);
+}
+
 /* ---- Shuffle All's track set ------------------------------------------ */
 
 void trimpod_library_music_paths(bool (*cb)(const char *path, void *ctx),

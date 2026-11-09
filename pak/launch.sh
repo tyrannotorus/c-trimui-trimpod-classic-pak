@@ -85,6 +85,10 @@ SPK_MUTE=/sys/class/speaker/mute
 TRIMPOD_SPK_MUTE="$(cat "$SPK_MUTE" 2>/dev/null)"
 [ -n "$TRIMPOD_SPK_MUTE" ] && echo 0 > "$SPK_MUTE" 2>/dev/null
 
+# USB file transfer: the app runs mtp.sh start/stop as USB power comes and goes,
+# so a connected computer sees the SD card over MTP; exit runs stop.
+[ -n "$MTP_GADGET" ] && export MTP_SCRIPT="$(pwd)/mtp.sh"
+
 # ALL teardown lives here so it runs on every catchable exit path -- a clean
 # binary return, or INT/TERM/HUP (e.g. NextUI stopping the pak) -- not just the
 # fall-through after the binary returns.  Idempotent and ordered: stop the app +
@@ -100,6 +104,7 @@ cleanup() {
   [ -n "$TRIMPOD_DAC" ] && amixer -q sset "DAC volume" "$TRIMPOD_DAC" 2>/dev/null
   [ -n "$TRIMPOD_SV" ] && amixer -q sset "Soft Volume Master" "$TRIMPOD_SV" 2>/dev/null
   [ -n "$TRIMPOD_SPK_MUTE" ] && echo "$TRIMPOD_SPK_MUTE" > "$SPK_MUTE" 2>/dev/null
+  [ -n "$MTP_SCRIPT" ] && sh "$MTP_SCRIPT" stop
   if [ -d "$CPUP" ] && [ -n "$TRIMPOD_OLD_GOV" ]; then
     echo 408000 > "$CPUP/scaling_min_freq"
     echo "$TRIMPOD_OLD_MAX" > "$CPUP/scaling_max_freq"

@@ -6,8 +6,9 @@
  *   Firmware   |____|_  /\____/ \___  >__|_ \|___  /\____/__/\_ \
  *                     \/            \/     \/    \/            \/
  *
- * Trimpod: the Settings -> Library menu -- the Music / Podcast / Audiobook
- * source-folder lists plus a Rescan Library action, on a nested do_menu page.
+ * Trimpod: the Settings -> Library menu -- the Music / Podcast / Audiobook /
+ * Movie / Television source-folder lists plus a Rescan Library action, on a
+ * nested do_menu page.
  * Each folder chevron row opens its existing management page unchanged.
  *
  * This program is free software; you can redistribute it and/or
@@ -35,6 +36,10 @@ MENUITEM_FUNCTION(tp_af_podcast, MENU_SHOW_CHEVRON, ID2P(LANG_TRIMPOD_PODCAST_FO
                   trimpod_podcast_settings, NULL, Icon_NOICON);
 MENUITEM_FUNCTION(tp_af_audiobook, MENU_SHOW_CHEVRON, ID2P(LANG_TRIMPOD_AUDIOBOOK_FOLDERS),
                   trimpod_audiobook_settings, NULL, Icon_NOICON);
+MENUITEM_FUNCTION(tp_af_movies, MENU_SHOW_CHEVRON, ID2P(LANG_TRIMPOD_MOVIE_FOLDERS),
+                  trimpod_movies_settings, NULL, Icon_NOICON);
+MENUITEM_FUNCTION(tp_af_television, MENU_SHOW_CHEVRON, ID2P(LANG_TRIMPOD_TELEVISION_FOLDERS),
+                  trimpod_television_settings, NULL, Icon_NOICON);
 
 /* Rescan Library: rebuild the SQLite tag index from the source folders, behind
  * the reconcile's own Scanning screen. */
@@ -48,7 +53,7 @@ MENUITEM_FUNCTION(tp_af_rescan, 0, ID2P(LANG_TRIMPOD_RESCAN),
 
 MAKE_MENU(trimpod_audio_folders_menu, ID2P(LANG_TRIMPOD_LIBRARY), NULL,
           Icon_Submenu_Entered, &tp_af_music, &tp_af_podcast, &tp_af_audiobook,
-          &tp_af_rescan);
+          &tp_af_movies, &tp_af_television, &tp_af_rescan);
 
 int trimpod_audio_folders_page(void)
 {

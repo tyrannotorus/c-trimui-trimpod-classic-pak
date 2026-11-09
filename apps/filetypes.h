@@ -68,6 +68,7 @@ int filetype_get_icon(int attr);
 
 /* returns true if the attr is supported */
 bool  filetype_supported(int attr);
+bool  filetype_is_video(const char *name);
 
 
 #endif

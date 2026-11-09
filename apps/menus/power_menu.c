@@ -116,11 +116,8 @@ static void trimpod_theme_apply(int idx)
 
 /* CPU Frequency: inline selector over the A133's cpufreq steps; applied and
  * persisted live (power-target.c owns cpu_freq.txt). */
-extern void retrohh_cpu_set_freq(int khz);
-extern void retrohh_cpu_set_dynamic(void);
-extern int  retrohh_cpu_get_freq(void);
-extern bool retrohh_cpu_is_dynamic(void);
-extern void retrohh_cpu_save_choice(int khz);   /* persistence lives in power-target.c */
+extern int  retrohh_cpu_get_choice(void);       /* kHz; 0 = Dynamic */
+extern void retrohh_cpu_set_choice(int khz);    /* persistence lives in power-target.c */
 
 /* Charge Limit: caps charging at a % while Trimpod runs (power-target.c). The
  * row is hidden entirely when the standalone Battery Care daemon owns charging. */
@@ -147,38 +144,28 @@ static int trimpod_cpu_nearest_index(int khz)
     return idx;
 }
 
-static void trimpod_cpu_changed(int khz, void *ctx)
-{
-    (void)ctx;
-    if (khz <= 0)
-        retrohh_cpu_set_dynamic();       /* "Dynamic": tuned interactive, full range */
-    else
-        retrohh_cpu_set_freq(khz);       /* pin to a fixed step, live */
-    retrohh_cpu_save_choice(khz);        /* persists (khz<=0 -> "dynamic") */
-}
-
 /* ---- do_menu inline value-row callbacks (struct menu_value_cb) ----------- *
  * get() returns the current label (static strings, so no copy), cycle() steps
  * the value and applies + persists it live.  Stateless -- the current index is
- * derived from the live freq / bg_color each call. */
+ * derived from the saved choice / bg_color each call. */
 static const char *tp_cpu_value_get(void *ctx, char *buf, int len)
 {
     (void)ctx; (void)buf; (void)len;
-    if (retrohh_cpu_is_dynamic())
+    int khz = retrohh_cpu_get_choice();
+    if (khz <= 0)
         return "Dynamic";
-    return trimpod_cpu_labels[trimpod_cpu_nearest_index(retrohh_cpu_get_freq())];
+    return trimpod_cpu_labels[trimpod_cpu_nearest_index(khz)];
 }
 static void tp_cpu_value_cycle(void *ctx, int dir)
 {
     (void)ctx;
     /* Virtual list: index 0 = "Dynamic" (first), 1..N = the fixed steps. */
-    int vidx = retrohh_cpu_is_dynamic()
-                 ? 0
-                 : trimpod_cpu_nearest_index(retrohh_cpu_get_freq()) + 1;
+    int khz = retrohh_cpu_get_choice();
+    int vidx = khz <= 0 ? 0 : trimpod_cpu_nearest_index(khz) + 1;
     vidx += (dir < 0 ? -1 : 1);
     if (vidx < 0) vidx = 0;
     if (vidx > TRIMPOD_CPU_NFREQS) vidx = TRIMPOD_CPU_NFREQS;
-    trimpod_cpu_changed(vidx == 0 ? 0 : trimpod_cpu_freqs[vidx - 1], NULL);
+    retrohh_cpu_set_choice(vidx == 0 ? 0 : trimpod_cpu_freqs[vidx - 1]);
 }
 static const struct menu_value_cb trimpod_cpu_value =
     { tp_cpu_value_get, tp_cpu_value_cycle, NULL };

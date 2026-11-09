@@ -21,6 +21,12 @@ void trimpod_library_close(void);
  * number of track rows inserted/updated/deleted. */
 int  trimpod_library_reconcile(bool force_full);
 
+/* USB unplugged: music may have arrived over MTP.  Marks the index stale (safe from
+ * any event handler); library screens reconcile on next open, unless a computer is
+ * attached, as a half-copied file would be indexed and never revisited. */
+void trimpod_library_mark_stale(void);
+void trimpod_library_refresh_if_stale(void);
+
 /* Shuffle All's track set: every Music path in title order, one callback per
  * row (return false to stop).  Past TRIMPOD_MAX_FILES_IN_PLAYLIST rows it is a
  * uniform random sample, so shuffle can reach any track. */

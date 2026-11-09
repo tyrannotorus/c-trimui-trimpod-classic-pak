@@ -42,6 +42,15 @@ docker run --rm \
   make -j$JOBS
   # Produce the runtime zip package.sh assembles the .pak from.
   make fullzip
+  # uMTP-Responder (USB file transfer), built out of tree from lib/umtprd.
+  # cp -a keeps the sources' mtimes, so an unchanged tree doesn't rebuild.
+  cd /build
+  mkdir -p $BUILD_DIR/umtprd
+  cp -a lib/umtprd/. $BUILD_DIR/umtprd/
+  make -C $BUILD_DIR/umtprd -j$JOBS CC=\${CROSS_COMPILE}gcc umtprd
+  # Plugins for TrimUI's stock video player, built from lib/tplayer_plugins.
+  mkdir -p $BUILD_DIR/tplayer_plugins
+  make -C lib/tplayer_plugins -j$JOBS CC=\${CROSS_COMPILE}gcc OUT=/build/$BUILD_DIR/tplayer_plugins
 "
 
 echo ">> Done. Binary: $BUILD_DIR/trimpod (runtime zip: $BUILD_DIR/trimpod-full.zip)"

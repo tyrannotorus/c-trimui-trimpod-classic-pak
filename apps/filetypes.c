@@ -387,3 +387,20 @@ bool filetype_supported(int attr)
 {
     return find_attr(attr) >= 0;
 }
+
+/* Trimpod: what the Movies and Television browsers list.  By extension, as .mp4
+ * is also registered as audio. */
+bool filetype_is_video(const char *name)
+{
+    static const char * const exts[] = {
+        "mp4", "m4v", "mkv", "avi", "mov", "webm", "mpg", "mpeg", "ts", "wmv",
+    };
+    const char *ext = strrchr(name, '.');
+
+    if (!ext)
+        return false;
+    for (unsigned i = 0; i < sizeof(exts) / sizeof(exts[0]); i++)
+        if (!strcasecmp(ext + 1, exts[i]))
+            return true;
+    return false;
+}

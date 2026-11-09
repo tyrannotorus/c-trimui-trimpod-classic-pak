@@ -1,12 +1,13 @@
 /***************************************************************************
- * Trimpod: user-managed virtual folders (Music, Podcasts, Audiobooks).
+ * Trimpod: user-managed virtual folders (Music, Podcasts, Audiobooks, Movies,
+ * Television).
  *
  * Each category is a "virtual folder" that merges the contents of a
  * user-managed set of source folders.  On first run the list is SEEDED with a
  * default folder (/mnt/SDCARD/<Name>, which may or may not exist on the card --
  * a missing folder is simply skipped, never an error), but the user may remove
- * any folder, the seeded default included.  All three categories share one
- * engine, parameterised by a `struct folder_category`:
+ * any folder, the seeded default included.  All categories share one engine,
+ * parameterised by a `struct folder_category`:
  *
  *  - Storage:  ROCKBOX_DIR/<store_file>, one absolute path per line.  Seeded
  *    with default_path only when the file does not yet exist; once the file
@@ -59,6 +60,7 @@
 #include "trimpod_transition.h"   /* slide on folder descend/ascend */
 #include "trimpod_playlists.h"    /* Hold-A = add highlighted file/folder to a playlist */
 #include "trimpod_library.h"      /* Shuffle All's track set */
+#include "trimpod_video.h"
 
 #define PICKER_ROOT     "/mnt/SDCARD"   /* pickers open here, walk up to / */
 #define MAX_FOLDERS     24
@@ -78,7 +80,8 @@ struct browse_pos
     bool have_last;
 };
 
-/* One virtual-folder category (Music / Podcasts / Audiobooks). */
+/* One virtual-folder category (Music / Podcasts / Audiobooks / Movies /
+ * Television). */
 struct folder_category
 {
     const char *store_file;     /* basename under ROCKBOX_DIR (e.g. "folders.txt") */
@@ -86,6 +89,7 @@ struct folder_category
     const char *farm_path;      /* tmpfs merge dir (e.g. "/tmp/trimpod_music") */
     int title_lang;             /* "<Name> Folders" settings-page title */
     int browse_lang;            /* "<Name>" browse-screen title */
+    bool video;                 /* lists video; never in the music library index */
 
     /* runtime state */
     char folders[MAX_FOLDERS][FPATH_LEN];
@@ -113,6 +117,18 @@ static struct folder_category cat_audiobook = {
     .farm_path = "/tmp/trimpod_audiobooks",
     .title_lang = LANG_TRIMPOD_AUDIOBOOK_FOLDERS,
     .browse_lang = LANG_TRIMPOD_AUDIOBOOKS,
+};
+static struct folder_category cat_movies = {
+    .store_file = "movies.txt", .default_path = "/mnt/SDCARD/Movies",
+    .farm_path = "/tmp/trimpod_movies",
+    .title_lang = LANG_TRIMPOD_MOVIE_FOLDERS,
+    .browse_lang = LANG_TRIMPOD_MOVIES, .video = true,
+};
+static struct folder_category cat_television = {
+    .store_file = "television.txt", .default_path = "/mnt/SDCARD/Television",
+    .farm_path = "/tmp/trimpod_television",
+    .title_lang = LANG_TRIMPOD_TELEVISION_FOLDERS,
+    .browse_lang = LANG_TRIMPOD_TELEVISION, .video = true,
 };
 
 /* ---- storage ---------------------------------------------------------- */
@@ -173,7 +189,8 @@ static void folders_load(struct folder_category *cat)
 static void folders_changed(struct folder_category *cat)
 {
     folders_save(cat);
-    trimpod_library_reconcile(false);
+    if (!cat->video)
+        trimpod_library_reconcile(false);
 }
 
 static bool folders_add(struct folder_category *cat, const char *path)
@@ -264,6 +281,7 @@ struct picker_page
     /* music-browse mode (music=true): rows are folders+tracks, A plays a track,
      * exits with `result` for the root dispatch (GO_TO_WPS / GO_TO_ROOT) */
     bool   music;
+    bool   video;                  /* music mode over video files */
     int    result;
     struct browse_pos *pos;        /* music mode: where the position persists */
     struct tree_context *mctx;     /* music mode: the stock browse engine state */
@@ -478,6 +496,14 @@ static enum trimpod_page_result picker_on_action(struct trimpod_page *self,
                 char path[FPATH_LEN];
                 path_append(path, p->curdir, item_name(p, sel), sizeof(path));
                 browse_save_pos(p);   /* return from Now Playing lands back here */
+                if (p->video)
+                {
+                    /* Repaint: a slide after a video, in place after a notice. */
+                    if (!trimpod_video_play(path))
+                        trimpod_transition_suppress_next();
+                    trimpod_transition_arm_back();
+                    return TRIMPOD_PAGE_STAY;
+                }
                 if (trimpod_play_track(path))
                 {
                     p->result = GO_TO_WPS;
@@ -496,7 +522,7 @@ static enum trimpod_page_result picker_on_action(struct trimpod_page *self,
         case ACTION_STD_CONTEXT:     /* Hold A: music context menu / pick folder */
             if (p->music)
             {
-                if (have_sel)
+                if (have_sel && !p->video)
                 {
                     char path[FPATH_LEN];
                     path_append(path, p->curdir, item_name(p, sel), sizeof(path));
@@ -776,10 +802,11 @@ static const char *folder_resolve_root(struct folder_category *cat)
  * `show_empty`; otherwise nothing is shown and false comes back.  The page
  * result lands in *result. */
 static bool browse_run(const char *root, const char *start, int title_lang,
-                       struct browse_pos *pos, bool show_empty, int *result)
+                       struct browse_pos *pos, bool show_empty, bool video,
+                       int *result)
 {
     struct tree_context *c = tree_get_context();
-    static int music_filter = SHOW_MUSIC;
+    static int browse_filter;
     int  *saved_filter = c->dirfilter;
     int   saved_sort   = c->sort_dir;
     bool  saved_brows  = c->is_browsing;
@@ -787,7 +814,8 @@ static bool browse_run(const char *root, const char *start, int title_lang,
     char  saved_last[sizeof(global_status.browse_last_folder)];
     memcpy(saved_last, global_status.browse_last_folder, sizeof(saved_last));
 
-    c->dirfilter   = &music_filter;     /* dirs + audio, folders-first */
+    browse_filter  = video ? SHOW_VIDEO : SHOW_MUSIC;
+    c->dirfilter   = &browse_filter;    /* dirs + files, folders-first */
     c->sort_dir    = SORT_ALPHA;
     c->is_browsing = false;
     c->browse      = NULL;
@@ -802,7 +830,8 @@ static bool browse_run(const char *root, const char *start, int title_lang,
         .base = { .vt = &picker_vtable, .context = CONTEXT_LIST,
                   .allowed = picker_allowed, .no_arm_back = true,
                   .enter_honor_back = true },
-        .music = true, .result = GO_TO_ROOT,   /* root re-highlights our entry */
+        .music = true, .video = video,
+        .result = GO_TO_ROOT,                  /* root re-highlights our entry */
         .pos = pos, .mctx = c,
     };
     strlcpy(p.root, root, sizeof(p.root));
@@ -859,7 +888,8 @@ static int folder_browse(struct folder_category *cat)
 
     const char *root = folder_resolve_root(cat);
     int r;
-    if (root && browse_run(root, root, cat->browse_lang, &cat->pos, false, &r))
+    if (root && browse_run(root, root, cat->browse_lang, &cat->pos, false,
+                           cat->video, &r))
         return r;
 
     /* No usable source folder yet: instead of a dead-end "(empty)", drop the user
@@ -876,10 +906,14 @@ static int folder_browse(struct folder_category *cat)
 int trimpod_music_settings(void)     { return folders_settings(&cat_music); }
 int trimpod_podcast_settings(void)   { return folders_settings(&cat_podcast); }
 int trimpod_audiobook_settings(void) { return folders_settings(&cat_audiobook); }
+int trimpod_movies_settings(void)    { return folders_settings(&cat_movies); }
+int trimpod_television_settings(void) { return folders_settings(&cat_television); }
 
 int trimpod_music_browse(void *param)     { (void)param; return folder_browse(&cat_music); }
 int trimpod_podcast_browse(void *param)   { (void)param; return folder_browse(&cat_podcast); }
 int trimpod_audiobook_browse(void *param) { (void)param; return folder_browse(&cat_audiobook); }
+int trimpod_movies_browse(void *param)    { (void)param; return folder_browse(&cat_movies); }
+int trimpod_television_browse(void *param) { (void)param; return folder_browse(&cat_television); }
 
 /* root "Browse": the whole filesystem in the same browser as the categories.
  * Every entry opens at the card -- no remembered position, which could be the
@@ -890,7 +924,7 @@ int trimpod_files_browse(void *param)
     struct browse_pos pos = {0};   /* fresh each time: open at the card */
     int r = GO_TO_ROOT;
     browse_run("/", dir_exists(PICKER_ROOT) ? PICKER_ROOT : "/",
-               LANG_TRIMPOD_BROWSE, &pos, true, &r);
+               LANG_TRIMPOD_BROWSE, &pos, true, false, &r);
     return r;
 }
 
@@ -900,6 +934,7 @@ int trimpod_files_browse(void *param)
 int trimpod_shuffle_all(void *param)
 {
     (void)param;
+    trimpod_library_refresh_if_stale();
     folders_load(&cat_music);
 
     if (!folder_resolve_root(&cat_music))

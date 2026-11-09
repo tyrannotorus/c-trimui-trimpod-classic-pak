@@ -52,6 +52,11 @@ static GLuint gl_lcd_tex = 0, gl_prog = 0, gl_vbo = 0;
 static GLint  gl_u_fade = -1;
 static int gl_tex_w = 0, gl_tex_h = 0; /* size gl_lcd_tex is currently allocated for */
 
+/* A video plays on the display layer below this window: everything is
+ * transparent except the bottom video_overlay_rows LCD rows. */
+static bool video_through = false;
+static int  video_overlay_rows = 0;
+
 static const char *gl_vs_src =
     "attribute vec2 a_pos;\n"
     "attribute vec2 a_uv;\n"
@@ -139,8 +144,19 @@ static void gl_present_lcd_fade(SDL_Surface *src, float fade)
     glViewport(0, 0, w, h);
     glDisable(GL_DEPTH_TEST);   /* projectM may leave these on */
     glDisable(GL_BLEND);
-    glClearColor(0.f, 0.f, 0.f, 1.f);
+    glClearColor(0.f, 0.f, 0.f, video_through ? 0.f : 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
+
+    if (video_through)
+    {
+        if (!video_overlay_rows)
+        {
+            SDL_GL_SwapWindow(sdlWindow);
+            return;
+        }
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(0, 0, w, video_overlay_rows * h / src->h);
+    }
 
     glUseProgram(gl_prog);
     glUniform1f(gl_u_fade, fade);
@@ -171,8 +187,15 @@ static void gl_present_lcd_fade(SDL_Surface *src, float fade)
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat),
                           (void *)(2 * sizeof(GLfloat)));
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glDisable(GL_SCISSOR_TEST);
 
     SDL_GL_SwapWindow(sdlWindow);
+}
+
+void sdl_gl_set_video_through(bool on, int overlay_rows)
+{
+    video_through = on;
+    video_overlay_rows = overlay_rows;
 }
 
 /* Present the current LCD framebuffer faded toward black (1=normal, 0=black) and
@@ -262,6 +285,7 @@ void sdl_window_setup(void)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);   /* video shows through alpha 0 */
     flags |= SDL_WINDOW_OPENGL;
 
     if ((sdlWindow = SDL_CreateWindow(UI_TITLE, SDL_WINDOWPOS_CENTERED,

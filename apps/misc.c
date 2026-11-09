@@ -456,6 +456,7 @@ long default_event_handler_ex(long event, void (*callback)(void *), void *parame
 
         case SYS_CHARGER_DISCONNECTED:
             reset_runtime();
+            trimpod_library_mark_stale();   /* music may have arrived over MTP */
             return SYS_CHARGER_DISCONNECTED;
 #endif
 #if (CONFIG_PLATFORM & PLATFORM_HOSTED) && defined(PLATFORM_HAS_VOLUME_CHANGE)
