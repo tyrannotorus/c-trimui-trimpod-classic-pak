@@ -58,6 +58,8 @@ enum {
     GO_TO_TRIMPOD_ARTISTS,
     GO_TO_TRIMPOD_ALBUMS,
     GO_TO_TRIMPOD_SONGS,
+    GO_TO_TRIMPOD_MOVIES,
+    GO_TO_TRIMPOD_TELEVISION,
 };
 #ifndef PLUGIN
 extern struct menu_item_ex root_menu_;

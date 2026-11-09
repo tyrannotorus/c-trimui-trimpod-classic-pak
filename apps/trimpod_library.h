@@ -21,10 +21,9 @@ void trimpod_library_close(void);
  * number of track rows inserted/updated/deleted. */
 int  trimpod_library_reconcile(bool force_full);
 
-/* USB unplugged: a computer may have copied music in over MTP.  Mark the index
- * stale (no UI, safe from any event handler); the library screens reconcile on
- * their next open, but not while a computer is attached: a half-copied file
- * would be indexed and the directory gate would not revisit it. */
+/* USB unplugged: music may have arrived over MTP.  Marks the index stale (safe from
+ * any event handler); library screens reconcile on next open, unless a computer is
+ * attached, as a half-copied file would be indexed and never revisited. */
 void trimpod_library_mark_stale(void);
 void trimpod_library_refresh_if_stale(void);
 

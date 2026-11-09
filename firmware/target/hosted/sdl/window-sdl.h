@@ -47,5 +47,7 @@ void sdl_gl_make_current(void);
 SDL_GLContext sdl_gl_get_context(void);
 /* Present the current LCD framebuffer faded toward black (1=normal, 0=black). */
 void sdl_gl_present_lcd_fade(float fade);
+/* Let a video show through the window, keeping the bottom overlay_rows LCD rows. */
+void sdl_gl_set_video_through(bool on, int overlay_rows);
 
 #endif /* #ifndef __WINDOWSDL_H__ */

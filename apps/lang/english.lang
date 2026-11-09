@@ -17798,3 +17798,129 @@
     *: "Play Shuffled"
   </voice>
 </phrase>
+<phrase>
+  id: LANG_TRIMPOD_MOVIES
+  desc: Trimpod root menu Movies entry (browse configured folders)
+  user: core
+  <source>
+    *: "Movies"
+  </source>
+  <dest>
+    *: "Movies"
+  </dest>
+  <voice>
+    *: "Movies"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_TELEVISION
+  desc: Trimpod root menu Television entry (browse configured folders)
+  user: core
+  <source>
+    *: "Television"
+  </source>
+  <dest>
+    *: "Television"
+  </dest>
+  <voice>
+    *: "Television"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_MOVIE_FOLDERS
+  desc: Trimpod Settings > Movie Folders (movie folder list)
+  user: core
+  <source>
+    *: "Movie Folders"
+  </source>
+  <dest>
+    *: "Movie Folders"
+  </dest>
+  <voice>
+    *: "Movie Folders"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_TELEVISION_FOLDERS
+  desc: Trimpod Settings > Television Folders (television folder list)
+  user: core
+  <source>
+    *: "Television Folders"
+  </source>
+  <dest>
+    *: "Television Folders"
+  </dest>
+  <voice>
+    *: "Television Folders"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_VIDEO_HEVC
+  desc: Trimpod splash on opening an HEVC (H.265) video, which isn't supported
+  user: core
+  <source>
+    *: "HEVC video isn't supported"
+  </source>
+  <dest>
+    *: "HEVC video isn't supported"
+  </dest>
+  <voice>
+    *: "HEVC video isn't supported"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_VIDEO_FAILED
+  desc: Trimpod splash when a video can't be played
+  user: core
+  <source>
+    *: "Couldn't play this video"
+  </source>
+  <dest>
+    *: "Couldn't play this video"
+  </dest>
+  <voice>
+    *: "Couldn't play this video"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_ASPECT_FIT
+  desc: Trimpod video aspect ratio: whole picture with black bars
+  user: core
+  <source>
+    *: "Fit"
+  </source>
+  <dest>
+    *: "Fit"
+  </dest>
+  <voice>
+    *: "Fit"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_ASPECT_FILL
+  desc: Trimpod video aspect ratio: fills the screen, edges cropped
+  user: core
+  <source>
+    *: "Fill"
+  </source>
+  <dest>
+    *: "Fill"
+  </dest>
+  <voice>
+    *: "Fill"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_TRIMPOD_ASPECT_STRETCH
+  desc: Trimpod video aspect ratio: fills the screen, shape distorted
+  user: core
+  <source>
+    *: "Stretch"
+  </source>
+  <dest>
+    *: "Stretch"
+  </dest>
+  <voice>
+    *: "Stretch"
+  </voice>
+</phrase>

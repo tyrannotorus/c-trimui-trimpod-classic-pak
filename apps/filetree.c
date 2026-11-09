@@ -233,6 +233,7 @@ int ft_load(struct tree_context* c, const char* tempdir)
         /* filter out non-visible files */
         if ((!(dir_attr) && (CHK_FT(SHOW_PLAYLIST, FILE_ATTR_M3U) ||
             (CHK_FT(SHOW_MUSIC, FILE_ATTR_AUDIO) && file_attr != FILE_ATTR_M3U) ||
+            (*c->dirfilter == SHOW_VIDEO && !filetype_is_video((char *)entry->d_name)) ||
             (*c->dirfilter == SHOW_SUPPORTED && !filetype_supported(dptr->attr)))) ||
             CHK_FT(SHOW_WPS,  FILE_ATTR_WPS)  ||
             CHK_FT(SHOW_FONT, FILE_ATTR_FONT) ||

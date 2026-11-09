@@ -215,6 +215,8 @@ static const struct root_items items[] = {
     [GO_TO_TRIMPOD_ARTISTS] =   { trimpod_library_browse, (void*)(intptr_t)TP_LIB_ARTISTS },
     [GO_TO_TRIMPOD_ALBUMS] =    { trimpod_library_browse, (void*)(intptr_t)TP_LIB_ALBUMS },
     [GO_TO_TRIMPOD_SONGS] =     { trimpod_library_browse, (void*)(intptr_t)TP_LIB_SONGS },
+    [GO_TO_TRIMPOD_MOVIES] =    { trimpod_movies_browse, NULL },
+    [GO_TO_TRIMPOD_TELEVISION] = { trimpod_television_browse, NULL },
 };
 #define NUM_ITEMS (int)(sizeof(items)/sizeof(*items))
 
@@ -256,6 +258,10 @@ MENUITEM_RETURNVALUE_CHEVRON(podcast_item, ID2P(LANG_TRIMPOD_PODCASTS), GO_TO_TR
                      item_callback, Icon_Audio);
 MENUITEM_RETURNVALUE_CHEVRON(audiobook_item, ID2P(LANG_TRIMPOD_AUDIOBOOKS), GO_TO_TRIMPOD_AUDIOBOOKS,
                      item_callback, Icon_Audio);
+MENUITEM_RETURNVALUE_CHEVRON(movies_item, ID2P(LANG_TRIMPOD_MOVIES), GO_TO_TRIMPOD_MOVIES,
+                     item_callback, Icon_Audio);
+MENUITEM_RETURNVALUE_CHEVRON(television_item, ID2P(LANG_TRIMPOD_TELEVISION), GO_TO_TRIMPOD_TELEVISION,
+                     item_callback, Icon_Audio);
 MENUITEM_RETURNVALUE_CHEVRON(artists_item, ID2P(LANG_TRIMPOD_ARTISTS), GO_TO_TRIMPOD_ARTISTS,
                      item_callback, Icon_Audio);
 MENUITEM_RETURNVALUE_CHEVRON(albums_item, ID2P(LANG_TRIMPOD_ALBUMS), GO_TO_TRIMPOD_ALBUMS,
@@ -275,6 +281,8 @@ static struct menu_table menu_table[] = {
     { "music", &music_item },
     { "podcasts", &podcast_item },
     { "audiobooks", &audiobook_item },
+    { "movies", &movies_item },
+    { "television", &television_item },
     { "artists", &artists_item },
     { "albums", &albums_item },
     { "songs", &songs_item },
@@ -403,6 +411,16 @@ static int item_callback(int action,
                 if (!trimpod_mainmenu_is_enabled(TRIMPOD_MM_AUDIOBOOKS))
                     return ACTION_EXIT_MENUITEM;
             }
+            else if (this_item == &movies_item)
+            {
+                if (!trimpod_mainmenu_is_enabled(TRIMPOD_MM_MOVIES))
+                    return ACTION_EXIT_MENUITEM;
+            }
+            else if (this_item == &television_item)
+            {
+                if (!trimpod_mainmenu_is_enabled(TRIMPOD_MM_TELEVISION))
+                    return ACTION_EXIT_MENUITEM;
+            }
             else if (this_item == &artists_item)
             {
                 if (!trimpod_mainmenu_is_enabled(TRIMPOD_MM_ARTISTS))
@@ -460,6 +478,8 @@ static int trimpod_root_run(int last)
     ROOT_ADD(trimpod_mainmenu_is_enabled(TRIMPOD_MM_MUSIC),      &music_item);
     ROOT_ADD(trimpod_mainmenu_is_enabled(TRIMPOD_MM_PODCASTS),   &podcast_item);
     ROOT_ADD(trimpod_mainmenu_is_enabled(TRIMPOD_MM_AUDIOBOOKS), &audiobook_item);
+    ROOT_ADD(trimpod_mainmenu_is_enabled(TRIMPOD_MM_MOVIES),     &movies_item);
+    ROOT_ADD(trimpod_mainmenu_is_enabled(TRIMPOD_MM_TELEVISION), &television_item);
     ROOT_ADD(trimpod_mainmenu_is_enabled(TRIMPOD_MM_ARTISTS),    &artists_item);
     ROOT_ADD(trimpod_mainmenu_is_enabled(TRIMPOD_MM_ALBUMS),     &albums_item);
     ROOT_ADD(trimpod_mainmenu_is_enabled(TRIMPOD_MM_SONGS),      &songs_item);

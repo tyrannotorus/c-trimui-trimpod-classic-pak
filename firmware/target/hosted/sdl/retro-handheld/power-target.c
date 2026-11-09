@@ -100,11 +100,9 @@ bool charging_state(void)
     return charging;
 }
 
-/* USB file transfer: umtprd exists only while USB power is present.  The edge
- * is caught on the read below, which the power thread makes anyway, so nothing
- * extra runs on battery.  mtp.sh does the gadget work, detached: a double fork
- * leaves no zombie, and closing our fds keeps the long-lived umtprd from
- * holding any (a pipe end would stop the BT aplay child from seeing EOF). */
+/* USB file transfer: umtprd runs only while USB power is present, caught on the
+ * read the power thread makes anyway.  The double fork leaves no zombie; closing
+ * our fds keeps umtprd from holding a pipe the BT aplay child needs EOF on. */
 static void usb_transfer_edge(bool plugged)
 {
     char *script = get_path("MTP_SCRIPT");
@@ -131,10 +129,9 @@ static void usb_transfer_edge(bool plugged)
 
 static void cpu_hold_copy(bool on);
 
-/* A copy shows as USB interrupts, one per 512-byte packet.  Its speed follows
- * the clock (5.4 MB/s at 408 MHz, 9.6 at 1.8 GHz) yet leaves the CPU half idle,
- * so Dynamic never climbs: pin the CPU instead.  Quiet reads bridge the gaps
- * between files. */
+/* A copy shows as USB interrupts, one per 512-byte packet.  Its speed follows the
+ * clock yet leaves the CPU half idle, so Dynamic never climbs: pin the CPU instead.
+ * Quiet reads bridge the gaps between files. */
 #define USB_COPY_MIN_IRQS    1000   /* per status read */
 #define USB_COPY_QUIET_READS 5      /* ~10 s */
 

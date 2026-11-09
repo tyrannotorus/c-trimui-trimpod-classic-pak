@@ -128,6 +128,7 @@ enum {
     CONTEXT_USB_HID_MODE_PRESENTATION,
     CONTEXT_USB_HID_MODE_BROWSER,
     CONTEXT_USB_HID_MODE_MOUSE,
+    CONTEXT_TP_VIDEO, /* Trimpod: video playback */
     LAST_CONTEXT_PLACEHOLDER,
 };
 
@@ -364,6 +365,7 @@ enum {
     ACTION_TP_HOME, /* Trimpod: hold BACK -> jump to the main menu (home) */
     ACTION_TP_CHAP_PREV, /* Trimpod: L2 -> previous chapter (m4b audiobooks) */
     ACTION_TP_CHAP_NEXT, /* Trimpod: R2 -> next chapter (m4b audiobooks) */
+    ACTION_TP_VIDEO_ASPECT, /* Trimpod: X -> next video aspect ratio */
 
     LAST_ACTION_PLACEHOLDER, /* custom actions should be this + something */
 };

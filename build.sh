@@ -48,6 +48,9 @@ docker run --rm \
   mkdir -p $BUILD_DIR/umtprd
   cp -a lib/umtprd/. $BUILD_DIR/umtprd/
   make -C $BUILD_DIR/umtprd -j$JOBS CC=\${CROSS_COMPILE}gcc umtprd
+  # Plugins for TrimUI's stock video player, built from lib/tplayer_plugins.
+  mkdir -p $BUILD_DIR/tplayer_plugins
+  make -C lib/tplayer_plugins -j$JOBS CC=\${CROSS_COMPILE}gcc OUT=/build/$BUILD_DIR/tplayer_plugins
 "
 
 echo ">> Done. Binary: $BUILD_DIR/trimpod (runtime zip: $BUILD_DIR/trimpod-full.zip)"

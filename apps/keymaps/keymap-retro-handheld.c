@@ -74,6 +74,20 @@ static const struct button_mapping button_context_wps[]  = {
     LAST_ITEM_IN_LIST
 }; /* button_context_wps */
 
+/* Trimpod: video playback (trimpod_video.c). */
+static const struct button_mapping button_context_video[] = {
+    { ACTION_WPS_PLAY,        BUTTON_A|BUTTON_REL,        BUTTON_A },
+    { ACTION_WPS_BROWSE,      BUTTON_B|BUTTON_REL,        BUTTON_B },
+    { ACTION_WPS_SEEKBACK,    BUTTON_LEFT,                BUTTON_NONE },
+    { ACTION_WPS_SEEKBACK,    BUTTON_LEFT|BUTTON_REPEAT,  BUTTON_NONE },
+    { ACTION_WPS_SEEKFWD,     BUTTON_RIGHT,               BUTTON_NONE },
+    { ACTION_WPS_SEEKFWD,     BUTTON_RIGHT|BUTTON_REPEAT, BUTTON_NONE },
+    { ACTION_TP_CHAP_PREV,    BUTTON_L2|BUTTON_REL,       BUTTON_L2 },
+    { ACTION_TP_CHAP_NEXT,    BUTTON_R2|BUTTON_REL,       BUTTON_R2 },
+    { ACTION_TP_VIDEO_ASPECT, BUTTON_X|BUTTON_REL,        BUTTON_X },
+    LAST_ITEM_IN_LIST
+}; /* button_context_video */
+
 static const struct button_mapping button_context_wps_locked[] = {
     { ACTION_WPS_PLAY,              RC_BUTTON_PLAY|BUTTON_REL,             RC_BUTTON_PLAY },
     { ACTION_WPS_STOP,              RC_BUTTON_PLAY|BUTTON_REPEAT,          RC_BUTTON_PLAY },
@@ -213,6 +227,8 @@ const struct button_mapping* get_context_mapping(int context)
                 return button_context_wps_locked;
             else
                 return button_context_wps;
+        case CONTEXT_TP_VIDEO:
+            return button_context_video;
         case CONTEXT_LIST:
             return button_context_list;
         case CONTEXT_MAINMENU:
