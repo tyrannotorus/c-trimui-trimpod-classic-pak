@@ -216,15 +216,12 @@ static void hide_player_layer(void)
 
 bool retrohh_video_running(void)
 {
-    int st;
-
     if (player_pid < 0)
         return false;
-    if (waitpid(player_pid, &st, WNOHANG) == player_pid)
+    if (waitpid(player_pid, NULL, WNOHANG) == player_pid)
     {
         player_pid = -1;
-        if (!WIFEXITED(st) || WEXITSTATUS(st))
-            hide_player_layer();        /* it didn't take the layer down */
+        hide_player_layer();            /* however it ended */
         return false;
     }
     return true;
