@@ -92,6 +92,14 @@ intptr_t button_get_data(void);
 #define BUTTON_MULTIMEDIA_REW       (BUTTON_MULTIMEDIA|0x10)
 #define BUTTON_MULTIMEDIA_FFWD      (BUTTON_MULTIMEDIA|0x20)
 
+/* Trimpod: SYS_MEDIA_KEY's data, a headset command in the low bits and a serial
+ * above them, so a handler can tell a repeat of the same event. */
+#define MEDIA_KEY_PLAYPAUSE      1
+#define MEDIA_KEY_NEXT           2
+#define MEDIA_KEY_PREV           3
+#define MEDIA_KEY_MASK           3
+#define MEDIA_KEY_SERIAL_SHIFT   2
+
 #define BUTTON_MULTIMEDIA_ALL       (BUTTON_MULTIMEDIA_PLAYPAUSE| \
                                      BUTTON_MULTIMEDIA_STOP| \
                                      BUTTON_MULTIMEDIA_PREV| \

@@ -3213,10 +3213,39 @@ out_nolock:
 }
 
 /* resume a playlist track with the given crc_32 of the track name. */
-void playlist_resume_track(int start_index, unsigned int crc,
+bool playlist_resume_saved(void)
+{
+    if (global_status.resume_index == -1)
+        return false;
+    if (playlist_resume() != -1 &&
+        playlist_resume_track(global_status.resume_index,
+                              global_status.resume_crc32,
+                              global_status.resume_elapsed,
+                              global_status.resume_offset))
+        return true;
+    playlist_update_resume_info(NULL);           /* its songs are gone */
+    return false;
+}
+
+/* Trimpod: the first track from 'from' on whose file is still there, or -1.
+ * Checked at resume, not at launch: files can go mid-session over MTP. */
+static int first_existing_track(struct playlist_info *playlist, int from)
+{
+    struct playlist_track_info info;
+
+    for (int index = from; index < playlist->amount; index++)
+        if (playlist_get_track_info(playlist, index, &info) == 0 &&
+            file_exists(info.filename))
+            return index;
+    return -1;
+}
+
+/* Trimpod: a saved track that has gone gives way to the next one there, from
+ * its start.  False when none from there on is left. */
+bool playlist_resume_track(int start_index, unsigned int crc,
                            unsigned long elapsed, unsigned long offset)
 {
-    int i;
+    int i, found;
     unsigned int tmp_crc;
     struct playlist_info* playlist = &current_playlist;
 
@@ -3227,13 +3256,23 @@ void playlist_resume_track(int start_index, unsigned int crc,
         tmp_crc = playlist_get_filename_crc32(playlist, index);
         if (tmp_crc == crc)
         {
-            playlist_start(index, elapsed, offset);
-            return;
+            found = first_existing_track(playlist, index);
+            if (found < 0)
+                return false;
+            if (found == index)
+                playlist_start(index, elapsed, offset);
+            else
+                playlist_start(found, 0, 0);
+            return true;
         }
     }
 
     /* If we got here the file wasnt found, so start from the beginning */
-    playlist_start(0, 0, 0);
+    found = first_existing_track(playlist, 0);
+    if (found < 0)
+        return false;
+    playlist_start(found, 0, 0);
+    return true;
 }
 
 /*

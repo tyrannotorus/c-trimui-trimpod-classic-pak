@@ -54,7 +54,7 @@
 #define POWEROFF_BUTTON BUTTON_POWER
 #define POWEROFF_COUNT 10
 
-/* Desktop-simulator keyboard keymap -> Rockbox button. */
+/* Headset media key -> Rockbox button, BUTTON_NONE for any other key. */
 int key_to_button(int keyboard_key);
 
 /* SDL joystick button index (Brick gamepad) -> Rockbox button, BUTTON_NONE if

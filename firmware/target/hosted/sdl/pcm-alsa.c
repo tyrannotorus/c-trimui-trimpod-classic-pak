@@ -23,7 +23,7 @@
  * firmware/target/hosted/pcm-alsa.c.  set_hwparams(), set_swparams(),
  * copy_frames() and the XRUN/prepare/start state machine are upstream's.
  *
- * Four deviations, each forced by this device.  Do not "restore" them:
+ * Six deviations, each forced by this device.  Do not "restore" them:
  *
  * 1. THE DEVICE IS NAMED PER ROUTE, never the hardware and never `default`.
  *    Upstream uses plughw:0,0, which does not even open here.  Naming the codec
@@ -45,7 +45,12 @@
  *
  * 5. LOSING A PRIVATE ROUTE PAUSES PLAYBACK -- Bluetooth or USB-C headphones --
  *    rather than following the route back to the internal speaker; see
- *    route_notify_lost(). */
+ *    route_notify_lost().
+ *
+ * 6. PRIVATE ROUTES CLOSE WHEN IDLE.  USB and Bluetooth have no dmix bus to
+ *    run on silence, so they close when the sink stops and reopen on play.
+ *    The speaker stays open: closing the codec powers it down, and powering up
+ *    buzzes. */
 
 #include "autoconf.h"
 
@@ -96,6 +101,8 @@ static const unsigned int channels = 2;
 /* Re-reading NextUI's settings block is a syscall round trip; keep it off the
  * ~23 ms write path. */
 #define ROUTE_POLL_MS   500
+/* audiomon publishes a new route, then writes NextUI's volume to it. */
+#define ROUTE_SETTLE_MS 1000
 
 /* Depth of the Bluetooth child's ALSA buffer, in periods of MIX_FRAME_SAMPLES
  * (~23 ms each at 44.1 kHz).  Eight is ~186 ms: comparable to the ~170 ms dmix
@@ -156,6 +163,8 @@ static volatile bool writer_run;
 static volatile bool dev_playing;   /* Rockbox has handed us a buffer */
 static bool open_shared;            /* the device is the "Playback" dmix bus */
 static int cur_route;               /* sink audiomon last published */
+static volatile bool private_open;      /* a USB or Bluetooth device is open */
+static volatile unsigned int out_delay_us;  /* written to the output, not yet heard */
 
 static void viz_pcm_push(const void *src_v, unsigned frames_n);
 
@@ -434,6 +443,10 @@ static bool bt_open(void)
 
     route_lost_sent = false;
     open_route = TRIMPOD_SINK_BT;
+    private_open = true;
+    /* aplay's buffer and the pipe; the speaker's own latency is unknown. */
+    out_delay_us = (unsigned int)((buffer_size + 2 * period_size) * 1000000ull /
+                                  last_sample_rate);
     real_sample_rate = last_sample_rate;
     fprintf(stderr, "pcm: bluetooth via child aplay (%s) at %u Hz\n",
             mac, last_sample_rate);
@@ -489,6 +502,7 @@ static bool dev_open(void)
 
     trimpod_alsa_unlock();
     open_route = route;
+    private_open = route != TRIMPOD_SINK_SPEAKER;
     open_shared = !strcmp(name, "Playback");
     route_lost_sent = false;
     fprintf(stderr, "pcm: opened %s at %u Hz (period %lu, buffer %lu)\n",
@@ -513,6 +527,7 @@ static void dev_close(void)
 
         bt_pipe = NULL;
         pclose(pipe);                   /* EOF; aplay drains and exits */
+        private_open = false;
         fprintf(stderr, "pcm: bluetooth helper closed\n");
         return;
     }
@@ -525,6 +540,7 @@ static void dev_close(void)
     snd_pcm_drop(h);                    /* not drain: never wait on the sink */
     snd_pcm_close(h);
     trimpod_alsa_unlock();
+    private_open = false;
     logf("pcm: closed");
 }
 
@@ -538,6 +554,15 @@ static void dev_close(void)
  *
  * NextUI's minarch closes the device as soon as audiomon rewrites ~/.asoundrc
  * and survives a speaker power-off, so closing is the behaviour that works. */
+/* The writer is a foreign thread: events go through the button queue to a
+ * Rockbox thread. */
+static void post_event(long id)
+{
+    sim_enter_irq_handler();
+    button_queue_post(id, 0);
+    sim_exit_irq_handler();
+}
+
 /* A private route is gone -- a Bluetooth speaker switched off, USB-C headphones
  * pulled out.  PAUSE rather than letting the writer follow the route home:
  * audiomon repoints it at the internal speaker within a second, and moving a
@@ -554,10 +579,7 @@ static void route_notify_lost(void)
     if (route_lost_sent)
         return;
     route_lost_sent = true;
-
-    sim_enter_irq_handler();
-    button_queue_post(SYS_PHONE_UNPLUGGED, 0);
-    sim_exit_irq_handler();
+    post_event(SYS_PHONE_UNPLUGGED);
 }
 
 static void dev_lost(const char *why)
@@ -579,8 +601,8 @@ static void dev_lost(const char *why)
 /* --- pulling audio from Rockbox (upstream copy_frames) --------------------- */
 
 /* Fill one period, padding with silence when Rockbox runs short.  The stream is
- * never stopped -- a restart clicks -- so routes without the dmix bus are fed
- * silence while idle too (see open_shared in writer_fn). */
+ * never stopped while open -- a restart clicks -- so a private route is fed
+ * silence until it closes for idle (see writer_fn). */
 static void copy_frames(void)
 {
     ssize_t frames_left = period_size;
@@ -637,7 +659,7 @@ static void copy_frames(void)
 /* Returns false if the device died and was abandoned. */
 static bool writer_step(bool *pending)
 {
-    snd_pcm_sframes_t space, n;
+    snd_pcm_sframes_t space, n, delay;
     int err;
 
     /* Bluetooth: hand the period to the child; its read paces us. */
@@ -739,13 +761,22 @@ static bool writer_step(bool *pending)
     if (snd_pcm_state(handle) == SND_PCM_STATE_PREPARED)
         snd_pcm_start(handle);
 
+    if (snd_pcm_delay(handle, &delay) == 0 && delay > 0)
+        out_delay_us = (unsigned int)(delay * 1000000ull / real_sample_rate);
     return true;
+}
+
+/* The speaker's dmix bus stays open while idle; a private route opens only to
+ * play. */
+static bool want_open(void)
+{
+    return audiodev || cur_route == TRIMPOD_SINK_SPEAKER || dev_playing;
 }
 
 static int writer_fn(void *param)
 {
-    bool pending = false;
-    Uint32 retry_at = 0, route_at = 0;
+    bool pending = false, settling = false;
+    Uint32 retry_at = 0, route_at = 0, settled_at = 0;
 
     (void)param;
 
@@ -775,7 +806,16 @@ static int writer_fn(void *param)
                     dev_lost("route changed");
                 else
                     dev_close();
+                settling = true;
+                settled_at = SDL_GetTicks() + ROUTE_SETTLE_MS;
             }
+        }
+
+        /* After audiomon's writes, so Trimpod's volume replaces NextUI's. */
+        if (settling && SDL_TICKS_PASSED(SDL_GetTicks(), settled_at))
+        {
+            settling = false;
+            post_event(SYS_AUDIO_ROUTE_CHANGED);
         }
 
         if (dev_is_open() && req_sample_rate &&
@@ -787,6 +827,11 @@ static int writer_fn(void *param)
 
         if (!dev_is_open())
         {
+            if (!want_open())
+            {
+                SDL_SemWaitTimeout(writer_wake, ROUTE_POLL_MS);
+                continue;
+            }
             if (SDL_TICKS_PASSED(SDL_GetTicks(), retry_at))
             {
                 if (req_sample_rate)
@@ -795,6 +840,16 @@ static int writer_fn(void *param)
                     retry_at = SDL_GetTicks() + REOPEN_DELAY_MS;
             }
             SDL_Delay(20);
+            continue;
+        }
+
+        /* A private route closes when the sink stops, which the mixer does
+         * after three seconds of silence, so pauses and skips keep it open. */
+        if (private_open && !dev_playing)
+        {
+            fprintf(stderr, "pcm: idle, closing\n");
+            dev_close();
+            pending = false;            /* silence */
             continue;
         }
 
@@ -912,6 +967,11 @@ static void sink_dma_init(void)
 
 static void sink_dma_postinit(void)
 {
+}
+
+unsigned int pcm_alsa_output_delay_us(void)
+{
+    return out_delay_us;
 }
 
 /* Called from audiohw_close() on the way out.  Every alsa-lib call the writer

@@ -159,6 +159,8 @@ void trimpod_page_run(struct trimpod_page *page)
             int handled = default_event_handler(action);
             if (handled == SYS_USB_CONNECTED)
                 done = true;
+            else if (handled == SYS_MEDIA_KEY)
+                page_render(page);      /* over playlist_resume()'s splash */
             else if (handled == SYS_POWEROFF || handled == SYS_REBOOT)
                 shutting_down = true;   /* exit is deferred; stop drawing */
         }

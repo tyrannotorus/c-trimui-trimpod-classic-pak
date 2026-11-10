@@ -298,21 +298,6 @@ static void gwps_caption_backlight(struct wps_state *state)
 
 /* Trimpod: chapters (cuesheet subtracks) never remap the D-pad -- prev/next
  * stay whole-file skips; chapter navigation is L2/R2 (ACTION_TP_CHAP_*). */
-static void prev_track(unsigned long skip_thresh)
-{
-    struct wps_state *state = get_wps_state();
-    if (state->id3->elapsed < skip_thresh)
-    {
-        audio_prev();
-        return;
-    }
-    else
-    {
-        audio_pre_ff_rewind();
-        audio_ff_rewind(0);
-    }
-}
-
 static void next_track(void)
 {
     audio_next();
@@ -329,7 +314,7 @@ static void play_hop(int direction)
     {
         if (direction < 0)
         {
-            prev_track(DEFAULT_SKIP_THRESH);
+            audio_prev_or_restart(DEFAULT_SKIP_THRESH);
             return;
         }
         else if (remaining < DEFAULT_SKIP_THRESH*2)
@@ -361,7 +346,7 @@ static void play_hop(int direction)
                 return;
             }
 
-            prev_track(DEFAULT_SKIP_THRESH);
+            audio_prev_or_restart(DEFAULT_SKIP_THRESH);
         }
         return;
     }

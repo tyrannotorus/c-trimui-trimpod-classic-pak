@@ -696,7 +696,7 @@ int do_menu(const struct menu_item_ex *start_menu, int *start_selected,
                     done = true;
                     break;
                 case SYS_CALL_HUNG_UP:
-                case BUTTON_MULTIMEDIA_PLAYPAUSE:
+                case SYS_MEDIA_KEY:
                 /* remove splash from playlist_resume() */
                     redraw_lists = true;
                     break;

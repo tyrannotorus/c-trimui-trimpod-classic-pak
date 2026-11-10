@@ -52,6 +52,7 @@
 #include "playlist.h"
 #include "trimpod_library.h"
 #include "trimpod_ui.h"      /* trimpod_fullscreen_message */
+#include "trimpod_alsa.h"    /* trimpod_alsa_route_changed */
 #include "yesno.h"
 #include "viewport.h"
 #include "list.h"
@@ -399,6 +400,43 @@ bool list_stop_handler(void)
 
 
 
+void audio_prev_or_restart(unsigned long skip_thresh)
+{
+    struct mp3entry *id3 = audio_current_track();
+
+    if (!id3 || id3->elapsed < skip_thresh)
+        audio_prev();
+    else
+    {
+        audio_pre_ff_rewind();
+        audio_ff_rewind(0);
+    }
+}
+
+/* Trimpod: a headset command (SYS_MEDIA_KEY).  True if it resumed a stopped
+ * playlist, whose loading splash the screen then has to paint over. */
+static bool media_key(int command)
+{
+    int status = audio_status();
+
+    if (!(status & AUDIO_STATUS_PLAY))
+    {
+        if (command != MEDIA_KEY_PLAYPAUSE)
+            return false;
+        playlist_resume_saved();
+        return true;
+    }
+    if (command == MEDIA_KEY_NEXT)
+        audio_next();
+    else if (command == MEDIA_KEY_PREV)
+        audio_prev_or_restart(DEFAULT_SKIP_THRESH);
+    else if (status & AUDIO_STATUS_PAUSE)
+        unpause_action(true);
+    else
+        pause_action(true);
+    return false;
+}
+
 long default_event_handler_ex(long event, void (*callback)(void *), void *parameter)
 {
 
@@ -436,6 +474,28 @@ long default_event_handler_ex(long event, void (*callback)(void *), void *parame
             if (audio_status() & AUDIO_STATUS_PLAY)
                 audio_pause();
             break;
+
+        /* Trimpod: audiomon moved the output and set NextUI's volume on it
+         * (pcm-alsa.c posts this once that has landed).  Put Trimpod's back. */
+        case SYS_AUDIO_ROUTE_CHANGED:
+            trimpod_alsa_route_changed();
+            sound_set(SOUND_VOLUME, global_status.volume);
+            break;
+
+        /* Trimpod: a headset button (button-sdl.c).  Some screens hand one event
+         * here twice; its serial tells. */
+        case SYS_MEDIA_KEY:
+        {
+            static intptr_t last;
+            intptr_t data = button_get_data();
+
+            if (data == last)
+                break;
+            last = data;
+            if (media_key(data & MEDIA_KEY_MASK))
+                return SYS_MEDIA_KEY;
+            break;
+        }
 
         case SYS_POWEROFF:
         case SYS_REBOOT:

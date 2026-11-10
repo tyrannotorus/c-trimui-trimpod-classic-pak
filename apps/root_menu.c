@@ -51,7 +51,6 @@ int trimpod_settings_page(void);   /* main_menu.c */
 #include "list.h"
 #include "splash.h"
 #include "action.h"
-#include "yesno.h"
 #include "viewport.h"
 
 #include "wps.h"
@@ -89,31 +88,14 @@ static int wpsscrn(void* param)
     {
         ret_val = gui_wps_show();
     }
-    else if (global_status.resume_index != -1)
+    else if (playlist_resume_saved())
     {
-        DEBUGF("Resume index %d crc32 %lX offset %lX\n",
-               global_status.resume_index,
-               (unsigned long)global_status.resume_crc32,
-               (unsigned long)global_status.resume_offset);
-        if (playlist_resume() != -1)
-        {
-            playlist_resume_track(global_status.resume_index,
-                global_status.resume_crc32,
-                global_status.resume_elapsed,
-                global_status.resume_offset);
-            ret_val = gui_wps_show();
-        }
+        ret_val = gui_wps_show();
     }
-    else if (!file_exists(PLAYLIST_CONTROL_FILE))
+    else
     {
         splash(HZ*2, ID2P(LANG_NOTHING_TO_RESUME));
         trimpod_transition_suppress_next();   /* only a splash: don't re-slide the menu */
-    }
-    else if (yesno_pop(ID2P(LANG_REPLAY_FINISHED_PLAYLIST)) &&
-             playlist_resume() != -1)
-    {
-        playlist_start(0, 0, 0);
-        ret_val = gui_wps_show();
     }
 
     if (ret_val == GO_TO_PLAYLIST_VIEWER
@@ -449,11 +431,9 @@ static int item_callback(int action,
             else if (this_item == &wps_item)
             {
                 /* Now Playing / Resume Playback: shown only when there is
-                 * something to play or resume (audio active, a saved resume
-                 * point, or a playlist control file to replay). */
-                if (!audio_status()
-                    && global_status.resume_index == -1
-                    && !file_exists(PLAYLIST_CONTROL_FILE))
+                 * something to play or resume.  A finished playlist is
+                 * replayed from the playlist itself. */
+                if (!audio_status() && global_status.resume_index == -1)
                     return ACTION_EXIT_MENUITEM;
             }
         break;

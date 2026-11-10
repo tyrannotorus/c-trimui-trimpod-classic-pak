@@ -84,71 +84,16 @@ int joyaxis_to_button(int axis)
     }
 }
 
-/* Keyboard -> Rockbox button mapping.  On the device nothing reaches this path
- * any more (the pad is read as a joystick); it is the DESKTOP SIMULATOR's keymap
- * -- you press l/k/i/j/w/s/a/d/... on the dev machine.  Kept so simulator builds
- * stay usable. */
+/* Keyboard keys -> Rockbox buttons: only the media keys a Bluetooth or USB
+ * headset sends.  Any keyboard-class device reaches this path, so nothing else
+ * may map, or a headset can hold a Brick button down. */
 int key_to_button(int keyboard_key)
 {
-    int new_btn = BUTTON_NONE;
     switch (keyboard_key)
     {
-        case SDLK_l:
-            new_btn = BUTTON_A;
-            break;
-        case SDLK_k:
-            new_btn = BUTTON_B;
-            break;
-        case SDLK_i:
-            new_btn = BUTTON_X;
-            break;
-        case SDLK_j:
-            new_btn = BUTTON_Y;
-            break;
-        case SDLK_w:
-            new_btn = BUTTON_UP;
-            break;
-        case SDLK_s:
-            new_btn = BUTTON_DOWN;
-            break;
-        case SDLK_a:
-            new_btn = BUTTON_LEFT;
-            break;
-        case SDLK_d:
-            new_btn = BUTTON_RIGHT;
-            break;
-        case SDLK_g:
-            new_btn = BUTTON_START;
-            break;
-        case SDLK_f:
-            new_btn = BUTTON_SELECT;
-            break;
-        case SDLK_q:
-            new_btn = BUTTON_L;
-            break;
-        case SDLK_e:
-            new_btn = BUTTON_R;
-            break;
-        case SDLK_z:
-            new_btn = BUTTON_L2;
-            break;
-        case SDLK_c:
-            new_btn = BUTTON_R2;
-            break;
-        /* Bluetooth media controls */
-        case SDLK_AUDIOPLAY:
-            new_btn = RC_BUTTON_PLAY;
-            break;
-        case SDLK_AUDIOPREV:
-            new_btn = RC_BUTTON_PREVSONG;
-            break;
-        case SDLK_AUDIONEXT:
-            new_btn = RC_BUTTON_NEXTSONG;
-            break;
-        default:
-            break;
-        /* SDLK_x is used for shutdown */
-        /* SDLK_h is used for hold */
+        case SDLK_AUDIOPLAY: return RC_BUTTON_PLAY;
+        case SDLK_AUDIOPREV: return RC_BUTTON_PREVSONG;
+        case SDLK_AUDIONEXT: return RC_BUTTON_NEXTSONG;
+        default:             return BUTTON_NONE;
     }
-    return new_btn;
 }

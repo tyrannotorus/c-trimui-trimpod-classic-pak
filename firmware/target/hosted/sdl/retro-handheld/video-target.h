@@ -9,7 +9,6 @@
 enum retrohh_video_aspect
 {
     RETROHH_VIDEO_FIT = 0,   /* whole picture, black bars */
-    RETROHH_VIDEO_FILL,      /* fills the screen, edges cropped */
     RETROHH_VIDEO_STRETCH,   /* fills the screen, shape distorted */
     RETROHH_VIDEO_ASPECT_COUNT,
 };
