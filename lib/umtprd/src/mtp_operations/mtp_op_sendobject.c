@@ -25,12 +25,14 @@
 
 #include "buildconf.h"
 
+#include <errno.h>
 #include <inttypes.h>
 #include <pthread.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
 
 #include "logs_out.h"
@@ -41,6 +43,14 @@
 #include "mtp_operations.h"
 
 #include "usb_gadget_fct.h"
+
+// Trimpod: after a failed write the rest of the data is still read, so the
+// transfer stays in step, but nothing more is written and the error is kept.
+static void write_chunk(int file, const unsigned char * buf, int sz, int * write_err)
+{
+	if( !*write_err && write(file, buf, sz) != sz )
+		*write_err = errno ? errno : EIO;
+}
 
 uint32_t mtp_op_SendObject(mtp_ctx * ctx,MTP_PACKET_HEADER * mtp_packet_hdr, int * size,uint32_t * ret_params, int * ret_params_size)
 {
@@ -99,6 +109,8 @@ uint32_t mtp_op_SendObject(mtp_ctx * ctx,MTP_PACKET_HEADER * mtp_packet_hdr, int
 
 					if( file != -1 )
 					{
+						int write_err = 0;
+
 						ctx->transferring_file_data = 1;
 
 						lseek64(file, ctx->SendObjInfoOffset, SEEK_SET);
@@ -109,10 +121,7 @@ uint32_t mtp_op_SendObject(mtp_ctx * ctx,MTP_PACKET_HEADER * mtp_packet_hdr, int
 
 						if(sz > 0)
 						{
-							if( write(file, tmp_ptr, sz) != sz)
-							{
-								// TODO : Handle this error case properly
-							}
+							write_chunk(file, tmp_ptr, sz, &write_err);
 
 							ctx->SendObjInfoSize -= sz;
 						}
@@ -134,10 +143,7 @@ uint32_t mtp_op_SendObject(mtp_ctx * ctx,MTP_PACKET_HEADER * mtp_packet_hdr, int
 
 							if( sz >= 0 )
 							{
-								if( write(file, tmp_ptr, sz) != sz)
-								{
-									// TODO : Handle this error case properly
-								}
+								write_chunk(file, tmp_ptr, sz, &write_err);
 
 								ctx->SendObjInfoSize -= sz;
 							}
@@ -159,7 +165,15 @@ uint32_t mtp_op_SendObject(mtp_ctx * ctx,MTP_PACKET_HEADER * mtp_packet_hdr, int
 							return MTP_RESPONSE_NO_RESPONSE;
 						}
 
-						response_code = MTP_RESPONSE_OK;
+						// Trimpod: an OK here would let a host's Move delete the original.
+						if( write_err )
+						{
+							PRINT_ERROR("SEND_OBJECT : write failed (%s)", strerror(write_err));
+							response_code = write_err == ENOSPC ? MTP_RESPONSE_STORAGE_FULL
+							                                     : MTP_RESPONSE_GENERAL_ERROR;
+						}
+						else
+							response_code = MTP_RESPONSE_OK;
 					}
 				}
 				else

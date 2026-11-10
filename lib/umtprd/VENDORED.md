@@ -11,3 +11,6 @@ Local changes (marked `Trimpod:`):
   opened (the Brick kernel lacks `CONFIG_POSIX_MQUEUE`); skip the
   single-instance lock instead, and initialise `retcode`, which that path
   can leave unset.
+- `src/mtp_operations/mtp_op_sendobject.c`: a failed write to the card is
+  reported to the host (`STORAGE_FULL` / `GENERAL_ERROR`) instead of `OK`, so a
+  Move can't delete the original.  The rest of the data is still read.
