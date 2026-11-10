@@ -314,7 +314,7 @@ static void play_hop(int direction)
     {
         if (direction < 0)
         {
-            audio_prev_or_restart(DEFAULT_SKIP_THRESH);
+            audio_prev_or_restart();
             return;
         }
         else if (remaining < DEFAULT_SKIP_THRESH*2)
@@ -346,7 +346,7 @@ static void play_hop(int direction)
                 return;
             }
 
-            audio_prev_or_restart(DEFAULT_SKIP_THRESH);
+            audio_prev_or_restart();
         }
         return;
     }
@@ -783,16 +783,7 @@ static enum trimpod_page_result wps_page_on_action(struct trimpod_page *p,
                 gwps_leave_wps();
                 w->result = GO_TO_PLAYLIST_VIEWER;
                 return TRIMPOD_PAGE_DONE;
-            default:
-                switch(default_event_handler(button))
-                {   /* music has been stopped by the default handler */
-                    case SYS_USB_CONNECTED:
-                    case SYS_CALL_INCOMING:
-                    case BUTTON_MULTIMEDIA_STOP:
-                        gwps_leave_wps();
-                        w->result = GO_TO_ROOT;
-                        return TRIMPOD_PAGE_DONE;
-                }
+            default:                /* system events: the page loop's */
                 w->update = true;
                 break;
         }

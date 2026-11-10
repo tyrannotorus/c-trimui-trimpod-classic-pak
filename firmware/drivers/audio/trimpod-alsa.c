@@ -120,7 +120,7 @@ static snd_ctl_t *dv_ctl = NULL;
 static snd_ctl_elem_value_t *dv_val = NULL;
 static snd_ctl_elem_value_t *dac_val = NULL;
 static bool dv_open_tried = false;
-static bool route_changed;
+static bool overwritten;        /* NextUI set its volume since ours */
 
 /* One open attempt; on failure software carries the whole volume range. */
 static void hw_dv_open(void)
@@ -138,6 +138,8 @@ static void hw_dv_open(void)
     if (snd_ctl_elem_value_malloc(&dv_val) < 0 ||
         snd_ctl_elem_value_malloc(&dac_val) < 0)
     {
+        snd_ctl_elem_value_free(dv_val);
+        dv_val = NULL;
         snd_ctl_close(dv_ctl);
         dv_ctl = NULL;
         return;
@@ -417,10 +419,10 @@ void trimpod_alsa_forget_sink(void)
     pthread_mutex_unlock(&alsa_cfg_lock);
 }
 
-void trimpod_alsa_route_changed(void)
+void trimpod_alsa_volume_overwritten(void)
 {
     pthread_mutex_lock(&alsa_cfg_lock);
-    route_changed = true;
+    overwritten = true;
     pthread_mutex_unlock(&alsa_cfg_lock);
 }
 
@@ -462,10 +464,10 @@ void audiohw_set_volume(int vol_l, int vol_r)
      * tree these handles came from at any moment. */
     pthread_mutex_lock(&alsa_cfg_lock);
 
-    if (sink != last_sink || route_changed)
+    if (sink != last_sink || overwritten)
     {
         last_sink = sink;
-        route_changed = false;
+        overwritten = false;
         bt_forget();                    /* re-probe once for the new route */
         usb_forget();
         if (sink == SINK_SPEAKER)

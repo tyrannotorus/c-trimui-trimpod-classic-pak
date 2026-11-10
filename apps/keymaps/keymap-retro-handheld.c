@@ -90,18 +90,6 @@ static const struct button_mapping button_context_video[] = {
     LAST_ITEM_IN_LIST
 }; /* button_context_video */
 
-static const struct button_mapping button_context_wps_locked[] = {
-    { ACTION_WPS_PLAY,              RC_BUTTON_PLAY|BUTTON_REL,             RC_BUTTON_PLAY },
-    { ACTION_WPS_STOP,              RC_BUTTON_PLAY|BUTTON_REPEAT,          RC_BUTTON_PLAY },
-    { ACTION_WPS_SKIPPREV,          RC_BUTTON_PREVSONG|BUTTON_REL,         RC_BUTTON_PREVSONG },
-    { ACTION_WPS_SKIPNEXT,          RC_BUTTON_NEXTSONG|BUTTON_REL,         RC_BUTTON_NEXTSONG },
-    { ACTION_WPS_SEEKBACK,          RC_BUTTON_PREVSONG|BUTTON_REPEAT,      BUTTON_NONE },
-    { ACTION_WPS_SEEKFWD,           RC_BUTTON_NEXTSONG|BUTTON_REPEAT,      BUTTON_NONE },
-    { ACTION_WPS_STOPSEEK,          RC_BUTTON_PREVSONG|BUTTON_REL,         RC_BUTTON_PREVSONG|BUTTON_REPEAT },
-    { ACTION_WPS_STOPSEEK,          RC_BUTTON_NEXTSONG|BUTTON_REL,         RC_BUTTON_NEXTSONG|BUTTON_REPEAT },
-    LAST_ITEM_IN_LIST
-}; /* button_context_wps_locked */
-
 static const struct button_mapping button_context_list[] = {
     { ACTION_LIST_VOLUP,      BUTTON_SELECT|BUTTON_A,                  BUTTON_NONE },
     { ACTION_LIST_VOLDOWN,    BUTTON_SELECT|BUTTON_Y,                  BUTTON_NONE },
@@ -225,10 +213,7 @@ const struct button_mapping* get_context_mapping(int context)
         case CONTEXT_STD:
             return button_context_standard;
         case CONTEXT_WPS:
-            if (context & CONTEXT_LOCKED)
-                return button_context_wps_locked;
-            else
-                return button_context_wps;
+            return button_context_wps;
         case CONTEXT_TP_VIDEO:
             return button_context_video;
         case CONTEXT_LIST:

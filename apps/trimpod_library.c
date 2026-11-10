@@ -759,8 +759,8 @@ void trimpod_library_init(void)
             return;                              /* app still runs without the index */
         }
     }
-    /* Not at boot: a big library's walk held the first menu for seconds.  Every
-     * reader refreshes first (trimpod_library_refresh_if_stale). */
+    /* Reconciled on first use, not at boot: a big library's walk is seconds.
+     * Every reader refreshes first (trimpod_library_refresh_if_stale). */
     trimpod_library_mark_stale();
 }
 

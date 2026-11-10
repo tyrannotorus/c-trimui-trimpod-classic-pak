@@ -76,7 +76,8 @@ static size_t take(unsigned int in_rate)
     return n;
 }
 
-/* Runs on the PCM writer's thread: nothing here may block. */
+/* The mixer's callback, mostly on the PCM writer's thread: nothing here may
+ * block. */
 static void get_more(const void **start, size_t *size)
 {
     unsigned int in_rate = __atomic_load_n(&ring->rate, __ATOMIC_ACQUIRE);
@@ -92,10 +93,8 @@ static void get_more(const void **start, size_t *size)
     __atomic_store_n(&ring->latency_us, pcm_alsa_output_delay_us() +
                      (uint32_t)((uint64_t)(MIX_FRAME_SAMPLES + n) * 1000000 / out_rate),
                      __ATOMIC_RELAXED);
-    if (write(wake_fd, "", 1) < 0)
-    {
-        /* full: the player hasn't drained the last wake-ups yet */
-    }
+    ssize_t woke = write(wake_fd, "", 1);  /* full: earlier wake-ups unread */
+    (void)woke;
     *start = chunk;
     *size = n * TPVA_FRAME_BYTES;
 }

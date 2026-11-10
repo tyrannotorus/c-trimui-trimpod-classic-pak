@@ -46,9 +46,9 @@ void trimpod_alsa_unlock(void);
  * speaker or a USB DAC that comes back is not the same control. */
 void trimpod_alsa_forget_sink(void);
 
-/* The output moved and audiomon set NextUI's volume on it: the next volume
- * set re-applies Trimpod's to every stage, speaker baseline included. */
-void trimpod_alsa_route_changed(void);
+/* NextUI set its volume on the output: the next volume set re-applies
+ * Trimpod's to every stage, speaker baseline included. */
+void trimpod_alsa_volume_overwritten(void);
 
 /* Stop the PCM writer thread and release the device.  Called from
  * audiohw_close() during shutdown. */

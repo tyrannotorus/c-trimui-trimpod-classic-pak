@@ -22,7 +22,6 @@
 #include <stdbool.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <SDL.h>
 #include "button.h"
 #include "button-target.h"
 
@@ -81,19 +80,5 @@ int joyaxis_to_button(int axis)
         case 2:  return BUTTON_L2;
         case 5:  return BUTTON_R2;
         default: return BUTTON_NONE;
-    }
-}
-
-/* Keyboard keys -> Rockbox buttons: only the media keys a Bluetooth or USB
- * headset sends.  Any keyboard-class device reaches this path, so nothing else
- * may map, or a headset can hold a Brick button down. */
-int key_to_button(int keyboard_key)
-{
-    switch (keyboard_key)
-    {
-        case SDLK_AUDIOPLAY: return RC_BUTTON_PLAY;
-        case SDLK_AUDIOPREV: return RC_BUTTON_PREVSONG;
-        case SDLK_AUDIONEXT: return RC_BUTTON_NEXTSONG;
-        default:             return BUTTON_NONE;
     }
 }

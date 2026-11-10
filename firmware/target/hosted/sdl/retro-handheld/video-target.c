@@ -216,12 +216,15 @@ static void hide_player_layer(void)
 
 bool retrohh_video_running(void)
 {
+    int st;
+
     if (player_pid < 0)
         return false;
-    if (waitpid(player_pid, NULL, WNOHANG) == player_pid)
+    if (waitpid(player_pid, &st, WNOHANG) == player_pid)
     {
         player_pid = -1;
-        hide_player_layer();            /* in case it died some other way */
+        if (!WIFEXITED(st) || WEXITSTATUS(st))
+            hide_player_layer();        /* it didn't take the layer down */
         return false;
     }
     return true;
@@ -328,7 +331,7 @@ void retrohh_video_set_aspect(const struct retrohh_video_info *info,
     }
     SDL_GL_GetDrawableSize(sdlWindow, &screen_w, &screen_h);
     /* The limiting edge matches the screen.  The window must stay on it: the
-     * display shows nothing of a layer that runs past an edge, so no Fill. */
+     * display shows nothing of a layer that runs past an edge. */
     if (ratio_num * screen_h > ratio_den * screen_w)
     {
         w = screen_w;

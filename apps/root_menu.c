@@ -29,7 +29,6 @@
 #include "settings.h"
 #include "screens.h"
 #include "kernel.h"
-#include "debug.h"
 #include "misc.h"
 #include "sound.h"
 #include "tdspeed.h"

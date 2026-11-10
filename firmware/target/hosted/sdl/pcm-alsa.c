@@ -101,14 +101,14 @@ static const unsigned int channels = 2;
 /* Re-reading NextUI's settings block is a syscall round trip; keep it off the
  * ~23 ms write path. */
 #define ROUTE_POLL_MS   500
-/* audiomon publishes a new route, then writes NextUI's volume to it. */
-#define ROUTE_SETTLE_MS 1000
 
 /* Depth of the Bluetooth child's ALSA buffer, in periods of MIX_FRAME_SAMPLES
  * (~23 ms each at 44.1 kHz).  Eight is ~186 ms: comparable to the ~170 ms dmix
  * imposes on the speaker route, which plays without underruns, and short enough
  * to keep the visualiser tap near the sound. */
 #define BT_BUFFER_PERIODS 8
+/* The pipe to it holds this many periods. */
+#define BT_PIPE_PERIODS   2
 
 /* Linux-specific and only declared under _GNU_SOURCE, which this build does not
  * define.  The value is fixed (F_LINUX_SPECIFIC_BASE + 7) on every arch. */
@@ -439,13 +439,13 @@ static bool bt_open(void)
      * visualiser tap and the child.  Two periods is all aplay needs to stay
      * fed, and the write side waits on poll() so the small buffer costs
      * nothing.  Best effort: an old kernel that refuses just keeps 64 KB. */
-    fcntl(fileno(bt_pipe), F_SETPIPE_SZ, (int)(2 * period_size * FRAME_BYTES));
+    fcntl(fileno(bt_pipe), F_SETPIPE_SZ, (int)(BT_PIPE_PERIODS * period_size * FRAME_BYTES));
 
     route_lost_sent = false;
     open_route = TRIMPOD_SINK_BT;
     private_open = true;
     /* aplay's buffer and the pipe; the speaker's own latency is unknown. */
-    out_delay_us = (unsigned int)((buffer_size + 2 * period_size) * 1000000ull /
+    out_delay_us = (unsigned int)((buffer_size + BT_PIPE_PERIODS * period_size) * 1000000ull /
                                   last_sample_rate);
     real_sample_rate = last_sample_rate;
     fprintf(stderr, "pcm: bluetooth via child aplay (%s) at %u Hz\n",
@@ -554,15 +554,6 @@ static void dev_close(void)
  *
  * NextUI's minarch closes the device as soon as audiomon rewrites ~/.asoundrc
  * and survives a speaker power-off, so closing is the behaviour that works. */
-/* The writer is a foreign thread: events go through the button queue to a
- * Rockbox thread. */
-static void post_event(long id)
-{
-    sim_enter_irq_handler();
-    button_queue_post(id, 0);
-    sim_exit_irq_handler();
-}
-
 /* A private route is gone -- a Bluetooth speaker switched off, USB-C headphones
  * pulled out.  PAUSE rather than letting the writer follow the route home:
  * audiomon repoints it at the internal speaker within a second, and moving a
@@ -579,7 +570,10 @@ static void route_notify_lost(void)
     if (route_lost_sent)
         return;
     route_lost_sent = true;
-    post_event(SYS_PHONE_UNPLUGGED);
+
+    sim_enter_irq_handler();
+    button_queue_post(SYS_PHONE_UNPLUGGED, 0);
+    sim_exit_irq_handler();
 }
 
 static void dev_lost(const char *why)
@@ -775,8 +769,8 @@ static bool want_open(void)
 
 static int writer_fn(void *param)
 {
-    bool pending = false, settling = false;
-    Uint32 retry_at = 0, route_at = 0, settled_at = 0;
+    bool pending = false;
+    Uint32 retry_at = 0, route_at = 0;
 
     (void)param;
 
@@ -806,16 +800,7 @@ static int writer_fn(void *param)
                     dev_lost("route changed");
                 else
                     dev_close();
-                settling = true;
-                settled_at = SDL_GetTicks() + ROUTE_SETTLE_MS;
             }
-        }
-
-        /* After audiomon's writes, so Trimpod's volume replaces NextUI's. */
-        if (settling && SDL_TICKS_PASSED(SDL_GetTicks(), settled_at))
-        {
-            settling = false;
-            post_event(SYS_AUDIO_ROUTE_CHANGED);
         }
 
         if (dev_is_open() && req_sample_rate &&
@@ -844,7 +829,8 @@ static int writer_fn(void *param)
         }
 
         /* A private route closes when the sink stops, which the mixer does
-         * after three seconds of silence, so pauses and skips keep it open. */
+         * after three seconds of silence, so skips and short pauses keep it
+         * open. */
         if (private_open && !dev_playing)
         {
             fprintf(stderr, "pcm: idle, closing\n");

@@ -3212,7 +3212,6 @@ out_nolock:
     return result;
 }
 
-/* resume a playlist track with the given crc_32 of the track name. */
 bool playlist_resume_saved(void)
 {
     if (global_status.resume_index == -1)
@@ -3223,7 +3222,7 @@ bool playlist_resume_saved(void)
                               global_status.resume_elapsed,
                               global_status.resume_offset))
         return true;
-    playlist_update_resume_info(NULL);           /* its songs are gone */
+    playlist_update_resume_info(NULL);  /* unreadable, or its songs are gone */
     return false;
 }
 
@@ -3240,7 +3239,8 @@ static int first_existing_track(struct playlist_info *playlist, int from)
     return -1;
 }
 
-/* Trimpod: a saved track that has gone gives way to the next one there, from
+/* resume a playlist track with the given crc_32 of the track name.
+ * Trimpod: a saved track that has gone gives way to the next one there, from
  * its start.  False when none from there on is left. */
 bool playlist_resume_track(int start_index, unsigned int crc,
                            unsigned long elapsed, unsigned long offset)

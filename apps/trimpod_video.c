@@ -515,7 +515,7 @@ static void run_session(void)
 
         if (action == SYS_MEDIA_KEY)            /* a headset: as A, R2, L2 */
         {
-            int command = button_get_data() & MEDIA_KEY_MASK;
+            int command = button_get_data();
 
             action = command == MEDIA_KEY_NEXT ? ACTION_TP_CHAP_NEXT :
                      command == MEDIA_KEY_PREV ? ACTION_TP_CHAP_PREV :

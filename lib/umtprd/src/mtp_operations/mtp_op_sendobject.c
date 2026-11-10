@@ -46,10 +46,18 @@
 
 // Trimpod: after a failed write the rest of the data is still read, so the
 // transfer stays in step, but nothing more is written and the error is kept.
+// A short write to a file means the card is full.
 static void write_chunk(int file, const unsigned char * buf, int sz, int * write_err)
 {
-	if( !*write_err && write(file, buf, sz) != sz )
-		*write_err = errno ? errno : EIO;
+	ssize_t written;
+
+	if( *write_err )
+		return;
+	written = write(file, buf, sz);
+	if( written < 0 )
+		*write_err = errno;
+	else if( written != sz )
+		*write_err = ENOSPC;
 }
 
 uint32_t mtp_op_SendObject(mtp_ctx * ctx,MTP_PACKET_HEADER * mtp_packet_hdr, int * size,uint32_t * ret_params, int * ret_params_size)

@@ -52,7 +52,7 @@
 #include "playlist.h"
 #include "trimpod_library.h"
 #include "trimpod_ui.h"      /* trimpod_fullscreen_message */
-#include "trimpod_alsa.h"    /* trimpod_alsa_route_changed */
+#include "trimpod_alsa.h"    /* trimpod_alsa_volume_overwritten */
 #include "yesno.h"
 #include "viewport.h"
 #include "list.h"
@@ -400,11 +400,11 @@ bool list_stop_handler(void)
 
 
 
-void audio_prev_or_restart(unsigned long skip_thresh)
+void audio_prev_or_restart(void)
 {
     struct mp3entry *id3 = audio_current_track();
 
-    if (!id3 || id3->elapsed < skip_thresh)
+    if (!id3 || id3->elapsed < DEFAULT_SKIP_THRESH)
         audio_prev();
     else
     {
@@ -413,8 +413,8 @@ void audio_prev_or_restart(unsigned long skip_thresh)
     }
 }
 
-/* Trimpod: a headset command (SYS_MEDIA_KEY).  True if it resumed a stopped
- * playlist, whose loading splash the screen then has to paint over. */
+/* Trimpod: a headset command (SYS_MEDIA_KEY).  True when it tried to resume a
+ * stopped playlist, whose loading may have splashed over the screen. */
 static bool media_key(int command)
 {
     int status = audio_status();
@@ -429,7 +429,7 @@ static bool media_key(int command)
     if (command == MEDIA_KEY_NEXT)
         audio_next();
     else if (command == MEDIA_KEY_PREV)
-        audio_prev_or_restart(DEFAULT_SKIP_THRESH);
+        audio_prev_or_restart();
     else if (status & AUDIO_STATUS_PAUSE)
         unpause_action(true);
     else
@@ -465,37 +465,29 @@ long default_event_handler_ex(long event, void (*callback)(void *), void *parame
             return SYS_USB_CONNECTED;
         }
 
-        /* Trimpod: the Bluetooth speaker went away mid-song, posted by the PCM
-         * writer (firmware/target/hosted/sdl/pcm-alsa.c).  Pause instead of
-         * following the route back to the internal speaker -- a private listen
-         * must not become a loudspeaker one.  Deliberately no auto-resume when
-         * it reconnects; that is the user's call. */
+        /* Trimpod: a private output went away mid-song -- Bluetooth or USB-C,
+         * posted by the PCM writer (pcm-alsa.c), or headphones out of the jack
+         * (button-sdl.c).  Pause instead of following the route back to the
+         * internal speaker -- a private listen must not become a loudspeaker
+         * one.  Deliberately no auto-resume when it returns; that is the
+         * user's call. */
         case SYS_PHONE_UNPLUGGED:
             if (audio_status() & AUDIO_STATUS_PLAY)
                 audio_pause();
             break;
 
-        /* Trimpod: audiomon moved the output and set NextUI's volume on it
-         * (pcm-alsa.c posts this once that has landed).  Put Trimpod's back. */
-        case SYS_AUDIO_ROUTE_CHANGED:
-            trimpod_alsa_route_changed();
+        /* Trimpod: NextUI set its own volume on the output, as audiomon does
+         * when it moves it (button-sdl.c watches for that).  Put Trimpod's back. */
+        case SYS_NEXTUI_VOLUME_SET:
+            trimpod_alsa_volume_overwritten();
             sound_set(SOUND_VOLUME, global_status.volume);
             break;
 
-        /* Trimpod: a headset button (button-sdl.c).  Some screens hand one event
-         * here twice; its serial tells. */
+        /* Trimpod: a headset or Bluetooth media button (button-sdl.c). */
         case SYS_MEDIA_KEY:
-        {
-            static intptr_t last;
-            intptr_t data = button_get_data();
-
-            if (data == last)
-                break;
-            last = data;
-            if (media_key(data & MEDIA_KEY_MASK))
+            if (media_key(button_get_data()))
                 return SYS_MEDIA_KEY;
             break;
-        }
 
         case SYS_POWEROFF:
         case SYS_REBOOT:

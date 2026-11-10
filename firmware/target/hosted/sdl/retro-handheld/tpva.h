@@ -13,7 +13,7 @@
 #include <stdint.h>
 
 #define TPVA_SHM        "/dev/shm/trimpod-video-audio"
-#define TPVA_WAKE       "/dev/shm/trimpod-video-audio.wake"  /* FIFO: a byte per take */
+#define TPVA_WAKE       "/dev/shm/trimpod-video-audio.wake"  /* FIFO: a byte per chunk */
 #define TPVA_MAGIC      0x41565054u                          /* "TPVA" */
 #define TPVA_VERSION    1
 #define TPVA_CHANNELS   2                                    /* S16_LE, interleaved */

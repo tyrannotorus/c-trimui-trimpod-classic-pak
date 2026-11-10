@@ -146,7 +146,7 @@ static int tp_delay(snd_pcm_ioplug_t *io, snd_pcm_sframes_t *delay)
     return 0;
 }
 
-/* Trimpod writes a byte to the wake FIFO each time it takes frames. */
+/* Trimpod writes a byte to the wake FIFO for each chunk it plays. */
 static int tp_poll_revents(snd_pcm_ioplug_t *io, struct pollfd *pfd,
                            unsigned int nfds, unsigned short *revents)
 {

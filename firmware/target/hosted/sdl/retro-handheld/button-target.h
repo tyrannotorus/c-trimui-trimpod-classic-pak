@@ -43,19 +43,11 @@
 #define BUTTON_VOL_DOWN 0x00008000
 #define BUTTON_VOL_MASK (BUTTON_VOL_UP | BUTTON_VOL_DOWN)
 
-/* Media controls */
-#define RC_BUTTON_PLAY        0x00010000
-#define RC_BUTTON_PREVSONG    0x00020000
-#define RC_BUTTON_NEXTSONG    0x00040000
-
 #define BUTTON_MAIN 0xFFFF
 
 /* Software power-off */
 #define POWEROFF_BUTTON BUTTON_POWER
 #define POWEROFF_COUNT 10
-
-/* Headset media key -> Rockbox button, BUTTON_NONE for any other key. */
-int key_to_button(int keyboard_key);
 
 /* SDL joystick button index (Brick gamepad) -> Rockbox button, BUTTON_NONE if
  * unmapped.  Includes the volume rocker (indices 14/13). */

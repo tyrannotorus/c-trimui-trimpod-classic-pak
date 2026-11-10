@@ -63,7 +63,7 @@ cp "$ROOT/build-trimpod/umtprd/umtprd" "$PAK/trimpod/umtprd"
 cp "$ROOT/lib/umtprd/LICENSE" "$PAK/licenses/umtprd_gplv3.txt"
 chmod +x "$PAK/launch.sh" "$PAK/trimpod/trimpod" "$PAK/trimpod/umtprd"
 
-echo ">> Injecting stock video player plugins (AC-3, DivX; source in lib/tplayer_plugins)"
+echo ">> Injecting stock video player plugins (AC-3, DivX, sound to Trimpod; source in lib/tplayer_plugins)"
 mkdir -p "$PAK/trimpod/video"
 cp "$ROOT"/build-trimpod/tplayer_plugins/*.so "$PAK/trimpod/video/"
 
