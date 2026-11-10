@@ -36,7 +36,6 @@
 #define CONTEXT_PLUGIN  0x10000000 /* for plugins using get_custom_action */
 #define CONTEXT_REMAPPED 0x08000000 /* marker for key remap context table */
 #define CORE_CONTEXT_REMAP(context) (CONTEXT_REMAPPED | context)
-#define CONTEXT_LOCKED  0x04000000 /* flag to use alternate keymap when screen is locked */
 
 
 #define LAST_ITEM_IN_LIST { CONTEXT_STOPSEARCHING, BUTTON_NONE, BUTTON_NONE }

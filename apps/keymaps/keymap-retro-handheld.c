@@ -208,7 +208,7 @@ static const struct button_mapping button_context_radio[]  = {
 
 const struct button_mapping* get_context_mapping(int context)
 {
-    switch (context & ~CONTEXT_LOCKED)
+    switch (context)
     {
         case CONTEXT_STD:
             return button_context_standard;

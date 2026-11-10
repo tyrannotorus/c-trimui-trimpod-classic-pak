@@ -476,9 +476,10 @@ long default_event_handler_ex(long event, void (*callback)(void *), void *parame
                 audio_pause();
             break;
 
-        /* Trimpod: NextUI set its own volume on the output, as audiomon does
-         * when it moves it (button-sdl.c watches for that).  Put Trimpod's back. */
-        case SYS_NEXTUI_VOLUME_SET:
+        /* Trimpod: NextUI saved its settings, which it does after setting its
+         * own volume on the output, as audiomon's output switch does
+         * (button-sdl.c watches the file).  Put Trimpod's volume back. */
+        case SYS_NEXTUI_SETTINGS_SAVED:
             trimpod_alsa_volume_overwritten();
             sound_set(SOUND_VOLUME, global_status.volume);
             break;

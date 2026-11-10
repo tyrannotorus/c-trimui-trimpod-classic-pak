@@ -27,7 +27,6 @@
 #include <poll.h>
 #include <string.h>
 #include <unistd.h>
-#include <limits.h>
 #include <sys/inotify.h>
 #include <sys/ioctl.h>
 #include <linux/input.h>
@@ -127,7 +126,6 @@ static void mouse_event(SDL_MouseButtonEvent *event, bool button_up)
     if(button_up) {
         switch ( event->button )
         {
-        /* The scrollwheel button up events are ignored as they are queued immediately */
         case SDL_BUTTON_LEFT:
             if ( mapping && background ) {
                 printf("    { SDLK_,     %d, %d, %d, \"\" },\n", x, y,
@@ -301,7 +299,7 @@ static struct pollfd input_fds[NODE_SLOT + MAX_INPUT_FDS];
 static bool input_headset[NODE_SLOT + MAX_INPUT_FDS];
 static int num_input_fds = NODE_SLOT;
 static int wake_pipe[2] = { -1, -1 };
-static int settings_wd = -1;            /* NextUI's settings file, on the watch */
+static int settings_wd = -1;            /* NextUI's settings directory */
 
 static bool has_code(int fd, int type, int code)
 {
@@ -317,8 +315,10 @@ static bool has_code(int fd, int type, int code)
  * carry Bluetooth's.  The play button counts taps: one is play/pause, two next,
  * three previous; a hold does nothing.  A headset's +/- are the volume rocker,
  * repeating while held.  Devices report only down and up: the timing is ours.
- * Every function here runs with the "interrupt" lock held. */
+ * media_key(), commit_taps() and headset_gone() run with the "interrupt" lock
+ * held. */
 #define TAP_GAP_MS  300                 /* Android's multi-press timeout */
+#define NEXTUI_SETTINGS "msettings.bin" /* in $USERDATA_PATH */
 #define HOLD_MS     400                 /* Android's long-press timeout */
 
 static struct
@@ -467,15 +467,12 @@ static void open_input_fds(void)
         watch = -1;
     }
     /* NextUI ends every volume change, audiomon's switch of output included,
-     * by rewriting this file, after its mixer and mute writes: the moment to
-     * put Trimpod's volume back. */
+     * by saving NEXTUI_SETTINGS, after its mixer and mute writes: the moment
+     * to put Trimpod's volume back.  The directory is watched, so the file
+     * needn't exist yet and may be replaced. */
     const char *userdata = getenv("USERDATA_PATH");
     if (watch >= 0 && userdata)
-    {
-        char path[PATH_MAX];
-        snprintf(path, sizeof path, "%s/msettings.bin", userdata);
-        settings_wd = inotify_add_watch(watch, path, IN_CLOSE_WRITE);
-    }
+        settings_wd = inotify_add_watch(watch, userdata, IN_CLOSE_WRITE | IN_MOVED_TO);
     input_fds[WATCH_SLOT] = (struct pollfd){ .fd = watch, .events = POLLIN };
 }
 
@@ -498,7 +495,10 @@ static void read_watch(void)
             const struct inotify_event *ev = (const struct inotify_event *)p;
 
             if (ev->wd == settings_wd)
-                post_event(SYS_NEXTUI_VOLUME_SET, 0);
+            {
+                if (ev->len && !strcmp(ev->name, NEXTUI_SETTINGS))
+                    post_event(SYS_NEXTUI_SETTINGS_SAVED, 0);
+            }
             else if (ev->len)
                 add_node(ev->name);
         }
