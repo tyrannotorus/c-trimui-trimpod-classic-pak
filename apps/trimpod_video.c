@@ -8,7 +8,8 @@
  *
  *   A            = play / pause (pausing shows the overlay)
  *   D-pad <- ->  = back / ahead 10 s (hold to keep going)
- *   L2 / R2      = previous / next chapter
+ *   L1 / R1      = back / ahead 10 s, as on Now Playing
+ *   L2 / R2      = previous / next chapter, as on Now Playing
  *   X            = aspect ratio: Fit, Stretch
  *   Volume +/-   = volume
  *   B            = with the overlay up, back to the list; else as A
