@@ -46,6 +46,7 @@ enum pcm_mixer_channel
     PCM_MIXER_CHAN_PLAYBACK = 0,
     PCM_MIXER_CHAN_VOICE,
     PCM_MIXER_CHAN_BEEP,
+    PCM_MIXER_CHAN_VIDEO,   /* Trimpod: the video player's sound (video-audio.c) */
     /* Add new channel indexes above this line */
     PCM_MIXER_NUM_CHANNELS,
 };

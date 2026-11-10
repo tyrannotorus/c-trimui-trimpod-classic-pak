@@ -298,21 +298,6 @@ static void gwps_caption_backlight(struct wps_state *state)
 
 /* Trimpod: chapters (cuesheet subtracks) never remap the D-pad -- prev/next
  * stay whole-file skips; chapter navigation is L2/R2 (ACTION_TP_CHAP_*). */
-static void prev_track(unsigned long skip_thresh)
-{
-    struct wps_state *state = get_wps_state();
-    if (state->id3->elapsed < skip_thresh)
-    {
-        audio_prev();
-        return;
-    }
-    else
-    {
-        audio_pre_ff_rewind();
-        audio_ff_rewind(0);
-    }
-}
-
 static void next_track(void)
 {
     audio_next();
@@ -329,7 +314,7 @@ static void play_hop(int direction)
     {
         if (direction < 0)
         {
-            prev_track(DEFAULT_SKIP_THRESH);
+            audio_prev_or_restart();
             return;
         }
         else if (remaining < DEFAULT_SKIP_THRESH*2)
@@ -361,7 +346,7 @@ static void play_hop(int direction)
                 return;
             }
 
-            prev_track(DEFAULT_SKIP_THRESH);
+            audio_prev_or_restart();
         }
         return;
     }
@@ -798,16 +783,7 @@ static enum trimpod_page_result wps_page_on_action(struct trimpod_page *p,
                 gwps_leave_wps();
                 w->result = GO_TO_PLAYLIST_VIEWER;
                 return TRIMPOD_PAGE_DONE;
-            default:
-                switch(default_event_handler(button))
-                {   /* music has been stopped by the default handler */
-                    case SYS_USB_CONNECTED:
-                    case SYS_CALL_INCOMING:
-                    case BUTTON_MULTIMEDIA_STOP:
-                        gwps_leave_wps();
-                        w->result = GO_TO_ROOT;
-                        return TRIMPOD_PAGE_DONE;
-                }
+            default:                /* system events: the page loop's */
                 w->update = true;
                 break;
         }

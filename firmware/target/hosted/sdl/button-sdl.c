@@ -27,6 +27,10 @@
 #include <poll.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/inotify.h>
+#include <sys/ioctl.h>
+#include <linux/input.h>
+#include "trimpod_alsa.h"
 #endif
 #include "sim-ui-defines.h"
 #include "config.h"
@@ -38,7 +42,6 @@
 #if SDL_MAJOR_VERSION > 1
 #include "window-sdl.h"
 #endif
-#include "buttonmap.h"
 #include "debug.h"
 #include "powermgmt.h"
 #include "storage.h"
@@ -57,18 +60,19 @@ bool button_hold(void) {
 }
 #endif
 
-static void button_event(int key, bool pressed);
+#ifdef RETRO_HANDHELD
+static void media_key(int code, bool down);
+#endif
 extern bool debug_wps;
 extern bool mapping;
 
 /* Trimpod: power button.  On-device the power key is KEY_POWER on the
  * axp2202-pek PMIC node, which SDL's evdev layer delivers as scancode
  * SDL_SCANCODE_POWER, so held state is tracked from SDL key events in
- * event_handler (power_key_held); SDLK_x in button_event is the desktop
- * simulator's shortcut.  Timed in button_read_device to match NextUI: a short
- * press (< 1s) toggles the display off/on while music keeps playing, a long
- * press (>= 1s) powers off.  No deep sleep -- a short press only blanks the
- * backlight. */
+ * event_handler (power_key_held).  Timed in button_read_device to match
+ * NextUI: a short press (< 1s) toggles the display off/on while music keeps
+ * playing, a long press (>= 1s) powers off.  No deep sleep -- a short press
+ * only blanks the backlight. */
 #define POWER_LONG_PRESS_TICKS  HZ      /* 1s, matches NextUI's 1000ms */
 static long power_down_tick = 0;        /* current_tick of power press (0 = up) */
 static bool power_blanked   = false;    /* display blanked by a power short press */
@@ -114,25 +118,6 @@ static void close_joysticks(void)
 }
 
 
-#if ((defined(BUTTON_SCROLL_FWD) && defined(BUTTON_SCROLL_BACK)))
-static void scrollwheel_event(int x, int y)
-{
-    int new_btn = 0;
-    if (y > 0)
-        new_btn = BUTTON_SCROLL_BACK;
-    else if (y < 0)
-        new_btn = BUTTON_SCROLL_FWD;
-    else
-        return;
-
-    backlight_on();
-    reset_poweroff_timer();
-    if (new_btn && !button_queue_full())
-        button_queue_post(new_btn, 1<<24);
-
-    (void)x;
-}
-#endif
 static void mouse_event(SDL_MouseButtonEvent *event, bool button_up)
 {
 #define SQUARE(x) ((x)*(x))
@@ -141,11 +126,6 @@ static void mouse_event(SDL_MouseButtonEvent *event, bool button_up)
     if(button_up) {
         switch ( event->button )
         {
-        case SDL_BUTTON_MIDDLE:
-        case SDL_BUTTON_RIGHT:
-            button_event( event->button, false );
-            break;
-        /* The scrollwheel button up events are ignored as they are queued immediately */
         case SDL_BUTTON_LEFT:
             if ( mapping && background ) {
                 printf("    { SDLK_,     %d, %d, %d, \"\" },\n", x, y,
@@ -157,10 +137,6 @@ static void mouse_event(SDL_MouseButtonEvent *event, bool button_up)
     } else {   /* button down */
         switch ( event->button )
         {
-        case SDL_BUTTON_MIDDLE:
-        case SDL_BUTTON_RIGHT:
-            button_event( event->button, true );
-            break;
         case SDL_BUTTON_LEFT:
             if ( mapping && background ) {
                 x = event->x;
@@ -196,12 +172,6 @@ static void mouse_event(SDL_MouseButtonEvent *event, bool button_up)
 
 static bool event_handler(SDL_Event *event)
 {
-#if SDL_MAJOR_VERSION > 1
-    SDL_Keycode ev_key;
-#else
-    SDLKey ev_key;
-#endif
-
     switch(event->type)
     {
 #if SDL_MAJOR_VERSION > 1
@@ -227,14 +197,28 @@ static bool event_handler(SDL_Event *event)
     case SDL_KEYUP:
         /* Power key (axp2202-pek PMIC node) arrives as scancode
          * SDL_SCANCODE_POWER; track held state for the gesture timing in
-         * button_read_device.  Everything else is the simulator keymap. */
+         * button_read_device.  Of the rest only media keys count, such as a
+         * Bluetooth headset's; volume keys come from the pad as joystick
+         * buttons. */
         if (event->key.keysym.scancode == SDL_SCANCODE_POWER)
         {
             power_key_held = (event->type == SDL_KEYDOWN);
             break;
         }
-        ev_key = event->key.keysym.sym;
-        button_event(ev_key, event->type == SDL_KEYDOWN);
+#ifdef RETRO_HANDHELD
+        {
+            static const struct { SDL_Scancode scancode; int key; } media[] = {
+                { SDL_SCANCODE_AUDIOPLAY, KEY_PLAYPAUSE },
+                { SDL_SCANCODE_AUDIONEXT, KEY_NEXTSONG },
+                { SDL_SCANCODE_AUDIOPREV, KEY_PREVIOUSSONG },
+            };
+
+            for (unsigned i = 0; i < ARRAYLEN(media); i++)
+                if (event->key.keysym.scancode == media[i].scancode &&
+                    !event->key.repeat)
+                    media_key(media[i].key, event->type == SDL_KEYDOWN);
+        }
+#endif
         break;
 
     /* Gamepad (read directly via SDL's joystick layer, no gptokeyb2). */
@@ -305,14 +289,160 @@ static bool event_handler(SDL_Event *event)
 #ifdef RETRO_HANDHELD
 /* With a joystick open SDL_WaitEvent polls every 1 ms.  Block in poll() instead,
  * on our own handles to the input nodes SDL reads, plus a pipe that
- * gui_message_loop_wake() writes after an SDL_PushEvent. */
+ * gui_message_loop_wake() writes after an SDL_PushEvent and a watch for nodes
+ * that appear later, such as a USB-C headset's. */
 #define MAX_INPUT_FDS 8
-static struct pollfd input_fds[MAX_INPUT_FDS + 1];
-static int num_input_fds;               /* [0] is the wake pipe */
+#define WAKE_SLOT     0
+#define WATCH_SLOT    1
+#define NODE_SLOT     2                 /* the first input node */
+static struct pollfd input_fds[NODE_SLOT + MAX_INPUT_FDS];
+static bool input_headset[NODE_SLOT + MAX_INPUT_FDS];
+static int num_input_fds = NODE_SLOT;
 static int wake_pipe[2] = { -1, -1 };
+static int settings_wd = -1;            /* NextUI's settings directory */
+
+static bool has_code(int fd, int type, int code)
+{
+    unsigned long bits[(KEY_MAX + 1) / (8 * sizeof(unsigned long))] = { 0 };
+
+    if (ioctl(fd, EVIOCGBIT(type, sizeof bits), bits) < 0)
+        return false;
+    return bits[code / (8 * sizeof bits[0])] >> (code % (8 * sizeof bits[0])) & 1;
+}
+
+/* ---- media buttons, by Android's rules but for the voice assistant ------
+ * From a USB-C headset (its grabbed node) and from SDL's keyboard events, which
+ * carry Bluetooth's.  The play button counts taps: one is play/pause, two next,
+ * three previous; a hold does nothing.  A headset's +/- are the volume rocker,
+ * repeating while held.  Devices report only down and up: the timing is ours.
+ * media_key(), commit_taps() and headset_gone() run with the "interrupt" lock
+ * held. */
+#define TAP_GAP_MS  300                 /* Android's multi-press timeout */
+#define NEXTUI_SETTINGS "msettings.bin" /* in $USERDATA_PATH */
+#define HOLD_MS     400                 /* Android's long-press timeout */
+
+static struct
+{
+    int    taps;
+    bool   down, pending;
+    Uint32 down_at, commit_at;
+} tap;
+static int headset_held;                /* BUTTON_VOL_* held on the headset */
+
+/* A play button and no axes: the Brick's own pad is USB too, with volume keys. */
+static bool is_headset(int fd)
+{
+    struct input_id id;
+
+    return ioctl(fd, EVIOCGID, &id) == 0 && id.bustype == BUS_USB &&
+           has_code(fd, EV_KEY, KEY_PLAYPAUSE) && !has_code(fd, 0, EV_ABS);
+}
+
+static void commit_taps(void)
+{
+    static const int command[] = {
+        0, MEDIA_KEY_PLAYPAUSE, MEDIA_KEY_NEXT, MEDIA_KEY_PREV,
+    };
+
+    button_queue_post(SYS_MEDIA_KEY, command[tap.taps]);
+    tap.taps = 0;
+    tap.pending = false;
+}
+
+static void headset_volume(int button, bool down)
+{
+    int was = btn;
+
+    if (down)
+        btn |= button;
+    else
+        btn &= ~button;
+    headset_held = down ? headset_held | button : headset_held & ~button;
+    released |= was & ~btn;
+}
+
+/* code is a Linux key code; down is press or release. */
+static void media_key(int code, bool down)
+{
+    Uint32 now = SDL_GetTicks();
+
+    switch (code)
+    {
+        case KEY_VOLUMEUP:
+            headset_volume(BUTTON_VOL_UP, down);
+            break;
+        case KEY_VOLUMEDOWN:
+            headset_volume(BUTTON_VOL_DOWN, down);
+            break;
+        case KEY_NEXTSONG:
+            if (down)
+                button_queue_post(SYS_MEDIA_KEY, MEDIA_KEY_NEXT);
+            break;
+        case KEY_PREVIOUSSONG:
+            if (down)
+                button_queue_post(SYS_MEDIA_KEY, MEDIA_KEY_PREV);
+            break;
+        case KEY_PLAYPAUSE:
+            if (down)
+            {
+                tap.down = true;
+                tap.down_at = now;
+                tap.pending = false;    /* another tap may follow */
+            }
+            else if (tap.down)
+            {
+                tap.down = false;
+                if (now - tap.down_at >= HOLD_MS)
+                    tap.taps = 0;       /* the assistant's gesture: unused */
+                else if (++tap.taps == 3)
+                    commit_taps();
+                else
+                {
+                    tap.pending = true;
+                    tap.commit_at = now + TAP_GAP_MS;
+                }
+            }
+            break;
+    }
+}
+
+static void headset_gone(void)
+{
+    if (headset_held & BUTTON_VOL_UP)
+        headset_volume(BUTTON_VOL_UP, false);
+    if (headset_held & BUTTON_VOL_DOWN)
+        headset_volume(BUTTON_VOL_DOWN, false);
+    tap.down = tap.pending = false;
+    tap.taps = 0;
+}
+
+/* ---- the poll set ------------------------------------------------------ */
+
+/* A headset's node is grabbed: only Trimpod reads it, so SDL can't act on it too. */
+static void add_node(const char *name)
+{
+    char path[64];
+    int i, fd;
+
+    if (strncmp(name, "event", 5))
+        return;
+    for (i = NODE_SLOT; i < num_input_fds && input_fds[i].fd >= 0; i++)
+        ;
+    if (i == NODE_SLOT + MAX_INPUT_FDS)
+        return;
+    snprintf(path, sizeof path, "/dev/input/%s", name);
+    fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0)
+        return;
+    input_fds[i] = (struct pollfd){ .fd = fd, .events = POLLIN };
+    input_headset[i] = is_headset(fd) && ioctl(fd, EVIOCGRAB, 1) == 0;
+    if (i == num_input_fds)
+        num_input_fds++;
+}
 
 static void open_input_fds(void)
 {
+    input_fds[WAKE_SLOT].fd = input_fds[WATCH_SLOT].fd = -1;
     if (pipe(wake_pipe) < 0)
         return;
     for (int i = 0; i < 2; i++)
@@ -320,46 +450,134 @@ static void open_input_fds(void)
         fcntl(wake_pipe[i], F_SETFL, O_NONBLOCK);
         fcntl(wake_pipe[i], F_SETFD, FD_CLOEXEC);
     }
-    input_fds[num_input_fds++] = (struct pollfd){ .fd = wake_pipe[0], .events = POLLIN };
+    input_fds[WAKE_SLOT] = (struct pollfd){ .fd = wake_pipe[0], .events = POLLIN };
 
     DIR *dir = opendir("/dev/input");
     if (!dir)
         return;
     struct dirent *de;
-    while ((de = readdir(dir)) && num_input_fds <= MAX_INPUT_FDS)
-    {
-        if (strncmp(de->d_name, "event", 5))
-            continue;
-        char path[64];
-        snprintf(path, sizeof path, "/dev/input/%s", de->d_name);
-        int fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
-        if (fd >= 0)
-            input_fds[num_input_fds++] = (struct pollfd){ .fd = fd, .events = POLLIN };
-    }
+    while ((de = readdir(dir)))
+        add_node(de->d_name);
     closedir(dir);
+
+    int watch = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+    if (watch >= 0 && inotify_add_watch(watch, "/dev/input", IN_CREATE) < 0)
+    {
+        close(watch);
+        watch = -1;
+    }
+    /* NextUI ends every volume change, audiomon's switch of output included,
+     * by saving NEXTUI_SETTINGS, after its mixer and mute writes: the moment
+     * to put Trimpod's volume back.  The directory is watched, so the file
+     * needn't exist yet and may be replaced. */
+    const char *userdata = getenv("USERDATA_PATH");
+    if (watch >= 0 && userdata)
+        settings_wd = inotify_add_watch(watch, userdata, IN_CLOSE_WRITE | IN_MOVED_TO);
+    input_fds[WATCH_SLOT] = (struct pollfd){ .fd = watch, .events = POLLIN };
+}
+
+static void post_event(long id, intptr_t data)
+{
+    sim_enter_irq_handler();
+    button_queue_post(id, data);
+    sim_exit_irq_handler();
+}
+
+static void read_watch(void)
+{
+    char buf[512] __attribute__((aligned(__alignof__(struct inotify_event))));
+    ssize_t got;
+
+    while ((got = read(input_fds[WATCH_SLOT].fd, buf, sizeof buf)) > 0)
+        for (char *p = buf; p < buf + got;
+             p += sizeof(struct inotify_event) + ((struct inotify_event *)p)->len)
+        {
+            const struct inotify_event *ev = (const struct inotify_event *)p;
+
+            if (ev->wd == settings_wd)
+            {
+                if (ev->len && !strcmp(ev->name, NEXTUI_SETTINGS))
+                    post_event(SYS_NEXTUI_SETTINGS_SAVED, 0);
+            }
+            else if (ev->len)
+                add_node(ev->name);
+        }
+}
+
+/* SDL doesn't report switches.  Headphones pulled from the jack while the
+ * codec plays pause playback, as a lost USB or Bluetooth output does; going in,
+ * the codec moves the sound to them by itself. */
+static void input_switch(const struct input_event *ev)
+{
+    if (ev->type == EV_SW && ev->code == SW_HEADPHONE_INSERT && !ev->value &&
+        trimpod_audio_sink() == TRIMPOD_SINK_SPEAKER)
+        post_event(SYS_PHONE_UNPLUGGED, 0);
+}
+
+static void node_event(int slot, const struct input_event *ev)
+{
+    if (!input_headset[slot])
+        input_switch(ev);
+    else if (ev->type == EV_KEY && ev->value <= 1)  /* not autorepeat */
+    {
+        sim_enter_irq_handler();
+        media_key(ev->code, ev->value);
+        sim_exit_irq_handler();
+    }
+}
+
+/* While a tap sequence is open, wake when it closes. */
+static int poll_timeout(void)
+{
+    int left = (int)(tap.commit_at - SDL_GetTicks());
+
+    return !tap.pending ? 1000 : left > 0 ? left : 0;
 }
 
 /* Sleep until input arrives and drain our copies; SDL reads its own when the
  * caller pumps.  The 1s timeout pumps what SDL queues without input (SIGTERM). */
 static void wait_for_input(void)
 {
-    if (poll(input_fds, num_input_fds, 1000) <= 0)
-        return;
-    for (int i = 0; i < num_input_fds; i++)
+    if (poll(input_fds, num_input_fds, poll_timeout()) > 0)
+        for (int i = 0; i < num_input_fds; i++)
+        {
+            struct pollfd *p = &input_fds[i];
+
+            if (p->fd < 0 || !p->revents)
+                continue;
+            if (i == WATCH_SLOT)
+                read_watch();
+            else if (p->revents & (POLLERR | POLLHUP | POLLNVAL))
+            {
+                if (input_headset[i])
+                {
+                    sim_enter_irq_handler();
+                    headset_gone();
+                    sim_exit_irq_handler();
+                }
+                input_headset[i] = false;
+                close(p->fd);           /* device gone: stop polling it */
+                p->fd = -1;
+            }
+            else
+            {
+                struct input_event evs[16];
+                ssize_t got;
+
+                while ((got = read(p->fd, evs, sizeof evs)) > 0)
+                    if (i >= NODE_SLOT)         /* not the wake pipe */
+                        for (int e = 0; e < got / (ssize_t)sizeof evs[0]; e++)
+                            node_event(i, &evs[e]);
+            }
+        }
+    if (tap.pending && SDL_TICKS_PASSED(SDL_GetTicks(), tap.commit_at))
     {
-        if (input_fds[i].revents & (POLLERR | POLLHUP | POLLNVAL))
-        {
-            close(input_fds[i].fd);     /* device gone: stop polling it */
-            input_fds[i].fd = -1;
-        }
-        else if (input_fds[i].revents & POLLIN)
-        {
-            char buf[512];
-            while (read(input_fds[i].fd, buf, sizeof buf) > 0)
-                ;
-        }
+        sim_enter_irq_handler();
+        commit_taps();
+        sim_exit_irq_handler();
     }
 }
+
 #endif /* RETRO_HANDHELD */
 
 void gui_message_loop_wake(void)
@@ -393,7 +611,7 @@ void gui_message_loop(void)
 
 #ifdef RETRO_HANDHELD
     open_input_fds();
-    if (num_input_fds > 1)
+    if (num_input_fds > NODE_SLOT)
     {
         while (!quit)
         {
@@ -419,45 +637,6 @@ void gui_message_loop(void)
 }
 
 
-static void button_event(int key, bool pressed)
-{
-    int new_btn = 0;
-    switch (key)
-    {
-    case SDLK_x:    /* desktop simulator only: the 'X' key = shutdown */
-        sys_poweroff();
-        break;
-#ifdef HAS_BUTTON_HOLD
-    case SDLK_h:
-        if(pressed)
-        {
-            hold_button_state = !hold_button_state;
-            DEBUGF("Hold button is %s\n", hold_button_state?"ON":"OFF");
-        }
-        return;
-#endif
-
-
-    default:
-            new_btn = key_to_button(key);
-        break;
-    }
-
-#if defined(BUTTON_SCROLL_FWD) && defined(BUTTON_SCROLL_BACK)
-    if((new_btn == BUTTON_SCROLL_FWD || new_btn == BUTTON_SCROLL_BACK) &&
-        pressed)
-    {
-        scrollwheel_event(0, new_btn == BUTTON_SCROLL_FWD ? -1 : 1);
-        new_btn &= ~(BUTTON_SCROLL_FWD | BUTTON_SCROLL_BACK);
-    }
-#endif
-
-    /* Update global button press state */
-    if (pressed)
-        btn |= new_btn;
-    else
-        btn &= ~new_btn;
-}
 #if defined(HAVE_BUTTON_DATA)
 int button_read_device(int* data)
 {

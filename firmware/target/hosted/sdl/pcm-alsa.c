@@ -23,7 +23,7 @@
  * firmware/target/hosted/pcm-alsa.c.  set_hwparams(), set_swparams(),
  * copy_frames() and the XRUN/prepare/start state machine are upstream's.
  *
- * Four deviations, each forced by this device.  Do not "restore" them:
+ * Six deviations, each forced by this device.  Do not "restore" them:
  *
  * 1. THE DEVICE IS NAMED PER ROUTE, never the hardware and never `default`.
  *    Upstream uses plughw:0,0, which does not even open here.  Naming the codec
@@ -45,7 +45,12 @@
  *
  * 5. LOSING A PRIVATE ROUTE PAUSES PLAYBACK -- Bluetooth or USB-C headphones --
  *    rather than following the route back to the internal speaker; see
- *    route_notify_lost(). */
+ *    route_notify_lost().
+ *
+ * 6. PRIVATE ROUTES CLOSE WHEN IDLE.  USB and Bluetooth have no dmix bus to
+ *    run on silence, so they close when the sink stops and reopen on play.
+ *    The speaker stays open: closing the codec powers it down, and powering up
+ *    buzzes. */
 
 #include "autoconf.h"
 
@@ -102,6 +107,8 @@ static const unsigned int channels = 2;
  * imposes on the speaker route, which plays without underruns, and short enough
  * to keep the visualiser tap near the sound. */
 #define BT_BUFFER_PERIODS 8
+/* The pipe to it holds this many periods. */
+#define BT_PIPE_PERIODS   2
 
 /* Linux-specific and only declared under _GNU_SOURCE, which this build does not
  * define.  The value is fixed (F_LINUX_SPECIFIC_BASE + 7) on every arch. */
@@ -156,6 +163,8 @@ static volatile bool writer_run;
 static volatile bool dev_playing;   /* Rockbox has handed us a buffer */
 static bool open_shared;            /* the device is the "Playback" dmix bus */
 static int cur_route;               /* sink audiomon last published */
+static volatile bool private_open;      /* a USB or Bluetooth device is open */
+static volatile unsigned int out_delay_us;  /* written to the output, not yet heard */
 
 static void viz_pcm_push(const void *src_v, unsigned frames_n);
 
@@ -430,10 +439,14 @@ static bool bt_open(void)
      * visualiser tap and the child.  Two periods is all aplay needs to stay
      * fed, and the write side waits on poll() so the small buffer costs
      * nothing.  Best effort: an old kernel that refuses just keeps 64 KB. */
-    fcntl(fileno(bt_pipe), F_SETPIPE_SZ, (int)(2 * period_size * FRAME_BYTES));
+    fcntl(fileno(bt_pipe), F_SETPIPE_SZ, (int)(BT_PIPE_PERIODS * period_size * FRAME_BYTES));
 
     route_lost_sent = false;
     open_route = TRIMPOD_SINK_BT;
+    private_open = true;
+    /* aplay's buffer and the pipe; the speaker's own latency is unknown. */
+    out_delay_us = (unsigned int)((buffer_size + BT_PIPE_PERIODS * period_size) * 1000000ull /
+                                  last_sample_rate);
     real_sample_rate = last_sample_rate;
     fprintf(stderr, "pcm: bluetooth via child aplay (%s) at %u Hz\n",
             mac, last_sample_rate);
@@ -489,6 +502,7 @@ static bool dev_open(void)
 
     trimpod_alsa_unlock();
     open_route = route;
+    private_open = route != TRIMPOD_SINK_SPEAKER;
     open_shared = !strcmp(name, "Playback");
     route_lost_sent = false;
     fprintf(stderr, "pcm: opened %s at %u Hz (period %lu, buffer %lu)\n",
@@ -513,6 +527,7 @@ static void dev_close(void)
 
         bt_pipe = NULL;
         pclose(pipe);                   /* EOF; aplay drains and exits */
+        private_open = false;
         fprintf(stderr, "pcm: bluetooth helper closed\n");
         return;
     }
@@ -525,6 +540,7 @@ static void dev_close(void)
     snd_pcm_drop(h);                    /* not drain: never wait on the sink */
     snd_pcm_close(h);
     trimpod_alsa_unlock();
+    private_open = false;
     logf("pcm: closed");
 }
 
@@ -579,8 +595,8 @@ static void dev_lost(const char *why)
 /* --- pulling audio from Rockbox (upstream copy_frames) --------------------- */
 
 /* Fill one period, padding with silence when Rockbox runs short.  The stream is
- * never stopped -- a restart clicks -- so routes without the dmix bus are fed
- * silence while idle too (see open_shared in writer_fn). */
+ * never stopped while open -- a restart clicks -- so a private route is fed
+ * silence until it closes for idle (see writer_fn). */
 static void copy_frames(void)
 {
     ssize_t frames_left = period_size;
@@ -637,7 +653,7 @@ static void copy_frames(void)
 /* Returns false if the device died and was abandoned. */
 static bool writer_step(bool *pending)
 {
-    snd_pcm_sframes_t space, n;
+    snd_pcm_sframes_t space, n, delay;
     int err;
 
     /* Bluetooth: hand the period to the child; its read paces us. */
@@ -739,7 +755,16 @@ static bool writer_step(bool *pending)
     if (snd_pcm_state(handle) == SND_PCM_STATE_PREPARED)
         snd_pcm_start(handle);
 
+    if (snd_pcm_delay(handle, &delay) == 0 && delay > 0)
+        out_delay_us = (unsigned int)(delay * 1000000ull / real_sample_rate);
     return true;
+}
+
+/* The speaker's dmix bus stays open while idle; a private route opens only to
+ * play. */
+static bool want_open(void)
+{
+    return audiodev || cur_route == TRIMPOD_SINK_SPEAKER || dev_playing;
 }
 
 static int writer_fn(void *param)
@@ -787,6 +812,11 @@ static int writer_fn(void *param)
 
         if (!dev_is_open())
         {
+            if (!want_open())
+            {
+                SDL_SemWaitTimeout(writer_wake, ROUTE_POLL_MS);
+                continue;
+            }
             if (SDL_TICKS_PASSED(SDL_GetTicks(), retry_at))
             {
                 if (req_sample_rate)
@@ -795,6 +825,17 @@ static int writer_fn(void *param)
                     retry_at = SDL_GetTicks() + REOPEN_DELAY_MS;
             }
             SDL_Delay(20);
+            continue;
+        }
+
+        /* A private route closes when the sink stops, which the mixer does
+         * after three seconds of silence, so skips and short pauses keep it
+         * open. */
+        if (private_open && !dev_playing)
+        {
+            fprintf(stderr, "pcm: idle, closing\n");
+            dev_close();
+            pending = false;            /* silence */
             continue;
         }
 
@@ -912,6 +953,11 @@ static void sink_dma_init(void)
 
 static void sink_dma_postinit(void)
 {
+}
+
+unsigned int pcm_alsa_output_delay_us(void)
+{
+    return out_delay_us;
 }
 
 /* Called from audiohw_close() on the way out.  Every alsa-lib call the writer

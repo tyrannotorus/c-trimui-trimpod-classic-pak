@@ -154,11 +154,16 @@ void trimpod_page_run(struct trimpod_page *page)
         if (page->vt->on_action &&
             page->vt->on_action(page, action) == TRIMPOD_PAGE_DONE)
             done = true;
-        else
+
+        /* System events are handled here, once, even when the page has just
+         * finished. */
+        if (action & SYS_EVENT)
         {
             int handled = default_event_handler(action);
             if (handled == SYS_USB_CONNECTED)
                 done = true;
+            else if (handled == SYS_MEDIA_KEY && !done)
+                page_render(page);      /* over playlist_resume()'s splash */
             else if (handled == SYS_POWEROFF || handled == SYS_REBOOT)
                 shutting_down = true;   /* exit is deferred; stop drawing */
         }

@@ -286,4 +286,8 @@ long from_normalized_volume(long norm, long min_vol, long max_vol, long max_norm
  * will be written to the lcd */
 void clear_screen_buffer(bool update);
 
+/* Back to the previous track, or the start of this one once past
+ * DEFAULT_SKIP_THRESH -- what "previous" means on Now Playing and a headset. */
+void audio_prev_or_restart(void);
+
 #endif /* MISC_H */

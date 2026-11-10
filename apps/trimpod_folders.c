@@ -498,9 +498,9 @@ static enum trimpod_page_result picker_on_action(struct trimpod_page *self,
                 browse_save_pos(p);   /* return from Now Playing lands back here */
                 if (p->video)
                 {
-                    /* Repaint: a slide after a video, in place after a notice. */
-                    if (!trimpod_video_play(path))
-                        trimpod_transition_suppress_next();
+                    /* A cut, not a slide: the video leaves on black. */
+                    trimpod_video_play(path);
+                    trimpod_transition_suppress_next();
                     trimpod_transition_arm_back();
                     return TRIMPOD_PAGE_STAY;
                 }

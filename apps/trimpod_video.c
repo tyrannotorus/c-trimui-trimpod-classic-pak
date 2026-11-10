@@ -6,12 +6,13 @@
  * draws the Now Playing panels in a strip at the bottom when there's something
  * to show: progress after any control, volume after the rocker.
  *
- *   A            = play / pause
+ *   A            = play / pause (pausing shows the overlay)
  *   D-pad <- ->  = back / ahead 10 s (hold to keep going)
- *   L2 / R2      = previous / next chapter
- *   X            = aspect ratio: Fit, Fill, Stretch
+ *   L1 / R1      = back / ahead 10 s, as on Now Playing
+ *   L2 / R2      = previous / next chapter, as on Now Playing
+ *   X            = aspect ratio: Fit, Stretch
  *   Volume +/-   = volume
- *   B            = pause and show the overlay; again = back to the list
+ *   B            = with the overlay up, back to the list; else as A
  *   Hold B       = main menu
  ****************************************************************************/
 #include "config.h"
@@ -277,8 +278,7 @@ static int display_position(void)
 static const char *aspect_label(void)
 {
     static const int labels[RETROHH_VIDEO_ASPECT_COUNT] = {
-        LANG_TRIMPOD_ASPECT_FIT, LANG_TRIMPOD_ASPECT_FILL,
-        LANG_TRIMPOD_ASPECT_STRETCH,
+        LANG_TRIMPOD_ASPECT_FIT, LANG_TRIMPOD_ASPECT_STRETCH,
     };
     return str(labels[aspect]);
 }
@@ -436,6 +436,33 @@ static void pause_and_save(void)
         resume_save(display_position(), v.duration_ms);
 }
 
+/* Opaque black, overlay included: the video layer below can't show until the
+ * window goes clear. */
+static void hide_video(void)
+{
+    struct screen *display = &screens[SCREEN_MAIN];
+
+    retrohh_video_set_overlay(false, 0);
+    display->set_background(LCD_BLACK);
+    display->clear_display();
+    display->set_background(global_settings.bg_color);
+    display->update();
+}
+
+/* Behind an opaque window, which clears once the picture is where it should
+ * be. */
+static bool start_player(const char *path, int start_ms)
+{
+    hide_video();
+    if (!retrohh_video_start(path, start_ms))
+        return false;
+    v.position_ms = start_ms;
+    v.seek_target_ms = -1;
+    v.reveal_by = current_tick + REVEAL_WAIT_TICKS;
+    v.ignore_report_until = start_ms ? v.reveal_by : current_tick;
+    return true;
+}
+
 /* False once the video is over. */
 static bool poll_player(void)
 {
@@ -486,12 +513,25 @@ static void run_session(void)
     {
         int action = get_action(CONTEXT_TP_VIDEO, ACTION_WAIT_TICKS);
 
+        if (action == SYS_MEDIA_KEY)            /* a headset: as A, R2, L2 */
+        {
+            int command = button_get_data();
+
+            action = command == MEDIA_KEY_NEXT ? ACTION_TP_CHAP_NEXT :
+                     command == MEDIA_KEY_PREV ? ACTION_TP_CHAP_PREV :
+                                                 ACTION_WPS_PLAY;
+        }
+
         if (action & SYS_EVENT)
         {
             long handled = default_event_handler(action);
 
             if (handled == SYS_POWEROFF || handled == SYS_REBOOT)
                 return;
+            /* Headphones gone, from the jack, USB-C or Bluetooth: pause, as
+             * music does.  The sound follows the output on its own. */
+            if (action == SYS_PHONE_UNPLUGGED && !v.paused)
+                pause_and_save();
         }
         else switch (action)
         {
@@ -499,7 +539,8 @@ static void run_session(void)
                 trimpod_home_pending = true;
                 return;
             case ACTION_WPS_BROWSE:
-                if (v.paused)
+                /* The overlay up, B leaves; otherwise it pauses and shows it. */
+                if (v.paused || v.shown != PANEL_NONE)
                     return;
                 pause_and_save();
                 break;
@@ -560,25 +601,12 @@ static void run_session(void)
     }
 }
 
-/* Opaque black: the video layer below can't show until the window goes clear. */
-static void hide_video(void)
+void trimpod_video_play(const char *path)
 {
-    struct screen *display = &screens[SCREEN_MAIN];
-
-    display->set_background(LCD_BLACK);
-    display->clear_display();
-    display->set_background(global_settings.bg_color);
-    display->update();
-}
-
-bool trimpod_video_play(const char *path)
-{
-    bool reported;
-
     if (retrohh_video_probe(path, &info) && info.hevc)
     {
         splash(2 * HZ, ID2P(LANG_TRIMPOD_VIDEO_HEVC));
-        return false;
+        return;
     }
 
     if (audio_status())
@@ -590,36 +618,20 @@ bool trimpod_video_play(const char *path)
     backlight_set_timeout(0);           /* a video is active use, not idle */
     FOR_NB_SCREENS(i)
         viewportmanager_theme_enable(i, false, NULL);
-    hide_video();
-
-    if (!retrohh_video_start(path, resume_start_ms))
-    {
-        FOR_NB_SCREENS(i)
-            viewportmanager_theme_undo(i, true);
-        backlight_set_timeout(global_settings.backlight_timeout);
-        retrohh_cpu_release_dynamic();
-        splash(2 * HZ, ID2P(LANG_TRIMPOD_VIDEO_FAILED));
-        return false;
-    }
 
     memset(&v, 0, sizeof v);
-    v.seek_target_ms = -1;
     v.last_volume = global_status.volume;
-    v.position_ms = resume_start_ms;
-    v.reveal_by = current_tick + REVEAL_WAIT_TICKS;
-    if (resume_start_ms)
-        v.ignore_report_until = current_tick + REVEAL_WAIT_TICKS;
-    button_clear_queue();
+    if (start_player(path, resume_start_ms))
+    {
+        button_clear_queue();
+        run_session();
+    }
 
-    run_session();
-
-    reported = v.reported;
-    if (reported)
+    /* Picture and overlay go in one frame; the player exits behind it. */
+    hide_video();
+    if (v.reported)
         resume_save(display_position(), v.duration_ms);
     retrohh_video_stop();
-    retrohh_video_set_overlay(false, 0);
-
-    screens[SCREEN_MAIN].clear_display();   /* the overlay drew on the LCD */
     FOR_NB_SCREENS(i)
         viewportmanager_theme_undo(i, true);
     if (power_display_off())
@@ -630,7 +642,6 @@ bool trimpod_video_play(const char *path)
     button_clear_queue();
     button_touch_activity();
 
-    if (!reported)
+    if (!v.reported)
         splash(2 * HZ, ID2P(LANG_TRIMPOD_VIDEO_FAILED));
-    return true;
 }

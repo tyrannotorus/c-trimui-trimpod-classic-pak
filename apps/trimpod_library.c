@@ -43,7 +43,7 @@
 #include "trimpod_folders.h"
 #include "trimpod_ui.h" /* trimpod_fullscreen_message */
 
-#define SCHEMA_VERSION 3
+#define SCHEMA_VERSION 4
 
 static sqlite3 *db;
 
@@ -206,7 +206,8 @@ struct scan_stmts
     sqlite3_stmt *track_del;    /* DELETE FROM tracks WHERE path=?            */
     sqlite3_stmt *dir_sel;      /* SELECT mtime FROM dirs WHERE path=?        */
     sqlite3_stmt *dir_ins;      /* upsert into dirs                          */
-    sqlite3_stmt *dir_del;      /* DELETE FROM dirs WHERE path=?              */
+    sqlite3_stmt *dir_del;      /* DELETE a dir and every dir under it        */
+    sqlite3_stmt *subtree_del;  /* DELETE the tracks in a dir and under it    */
     sqlite3_stmt *kids_sel;     /* SELECT path FROM dirs WHERE parent=?       */
     sqlite3_stmt *dtracks_sel;  /* SELECT path FROM tracks WHERE dir=?        */
 };
@@ -227,7 +228,11 @@ static bool scan_stmts_open(struct scan_stmts *s)
         && prep(&s->dir_ins,
                 "INSERT INTO dirs(path,parent,root_id,mtime) VALUES(?1,?2,?3,?4)"
                 " ON CONFLICT(path) DO UPDATE SET parent=?2,root_id=?3,mtime=?4;")
-        && prep(&s->dir_del,     "DELETE FROM dirs WHERE path=?;")
+        /* "X/" <= p < "X0" is everything under X ('0' follows '/'), on the index */
+        && prep(&s->dir_del,     "DELETE FROM dirs WHERE path=?1"
+                                 " OR (path>=?1||'/' AND path<?1||'0');")
+        && prep(&s->subtree_del, "DELETE FROM tracks WHERE dir=?1"
+                                 " OR (dir>=?1||'/' AND dir<?1||'0');")
         && prep(&s->kids_sel,    "SELECT path FROM dirs WHERE parent=?;")
         && prep(&s->dtracks_sel, "SELECT path FROM tracks WHERE dir=?;");
 }
@@ -237,6 +242,7 @@ static void scan_stmts_close(struct scan_stmts *s)
     sqlite3_finalize(s->track_del);  sqlite3_finalize(s->dir_sel);
     sqlite3_finalize(s->dir_ins);    sqlite3_finalize(s->dir_del);
     sqlite3_finalize(s->kids_sel);   sqlite3_finalize(s->dtracks_sel);
+    sqlite3_finalize(s->subtree_del);
 }
 
 /* Each helper binds, steps, then sqlite3_reset()s so the statement is clean for
@@ -404,7 +410,12 @@ static int scan_dir(struct scan_stmts *s, const char *path, const char *parent,
     collect(s->kids_sel, path, &rows);
     for (int i = 0; i < rows.n; i++)
         if (!ps_has(&seen_dirs, rows.v[i]))
-            delete_where(s->dir_del, rows.v[i]);   /* cascades tracks */
+        {
+            /* tracks reference roots, not dirs: nothing cascades */
+            delete_where(s->subtree_del, rows.v[i]);
+            delete_where(s->dir_del, rows.v[i]);
+            touched++;
+        }
     ps_free(&rows);
 
     upsert_dir(s->dir_ins, path, parent, root_id, cur);
@@ -691,6 +702,17 @@ static bool db_migrate(int from)
                     " ON tracks(category, title, path);")
                 != SQLITE_OK)
             return false;
+    if (from < 4)                                /* v4: rows left under removed folders */
+    {
+        do
+            if (db_exec("DELETE FROM dirs WHERE parent IS NOT NULL"
+                        " AND parent NOT IN (SELECT path FROM dirs);") != SQLITE_OK)
+                return false;
+        while (sqlite3_changes(db) > 0);
+        if (db_exec("DELETE FROM tracks WHERE dir NOT IN (SELECT path FROM dirs);")
+                != SQLITE_OK)
+            return false;
+    }
     return true;
 }
 
@@ -709,6 +731,7 @@ static bool db_setup(void)
     {
         if (!db_migrate(ver)) return false;
         set_user_version(SCHEMA_VERSION);
+        db_writeback();                          /* or it reruns every boot */
     }
     else if (ver > SCHEMA_VERSION)               /* newer/foreign db -> rebuild */
         return false;
@@ -736,7 +759,9 @@ void trimpod_library_init(void)
             return;                              /* app still runs without the index */
         }
     }
-    trimpod_library_reconcile(false);
+    /* Reconciled on first use, not at boot: a big library's walk is seconds.
+     * Every reader refreshes first (trimpod_library_refresh_if_stale). */
+    trimpod_library_mark_stale();
 }
 
 void trimpod_library_close(void)

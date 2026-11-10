@@ -1,6 +1,6 @@
 {
   "name": "Trimpod Classic",
-  "version": "v1.0.14",
+  "version": "v1.0.15",
   "type": "TOOL",
   "description": "An iPod Classic-inspired, offline music player for the TrimUI Brick/Hammer with winamp-like visualizations.",
   "author": "tyrannotorus",
@@ -11,6 +11,7 @@
   ],
   "platforms": ["tg5040"],
   "changelog": {
+    "v1.0.15": "- Video sound follows headphones and Bluetooth\n- USB-C headset buttons control playback\n- Leaving a video no longer blacks out the screen\n- Unplugging headphones pauses video and music\n- Volume is kept when headphones or Bluetooth change\n- L1/R1 seek 10 s in videos\n- Resume Playback skips deleted songs\n- Faster startup with large libraries\n- Deleted folders leave the library\n- Failed USB copies report an error\n- Lower idle CPU use with USB-C headphones and Bluetooth",
     "v1.0.14": "- Usb Mounting\n- Video playback",
     "v1.0.13": "- Improved battery life\n- Battery indicator is less pessimistic\n- The press that wakes the screen no longer passes through\n- Visualizers no longer stutter at a low CPU Frequency\n- Volume works with the hold switch on and no longer wakes the screen",
     "v1.0.12": "- Selecting a song plays only that song\n- Play Shuffled added to folder, artist, album and playlist menus\n- Now Playing Shuffle reshuffles and restarts the queue each time, and is no longer saved\n- Hold up/down to scroll lists",

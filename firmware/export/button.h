@@ -92,6 +92,11 @@ intptr_t button_get_data(void);
 #define BUTTON_MULTIMEDIA_REW       (BUTTON_MULTIMEDIA|0x10)
 #define BUTTON_MULTIMEDIA_FFWD      (BUTTON_MULTIMEDIA|0x20)
 
+/* Trimpod: SYS_MEDIA_KEY's data, a headset or Bluetooth media command. */
+#define MEDIA_KEY_PLAYPAUSE      1
+#define MEDIA_KEY_NEXT           2
+#define MEDIA_KEY_PREV           3
+
 #define BUTTON_MULTIMEDIA_ALL       (BUTTON_MULTIMEDIA_PLAYPAUSE| \
                                      BUTTON_MULTIMEDIA_STOP| \
                                      BUTTON_MULTIMEDIA_PREV| \

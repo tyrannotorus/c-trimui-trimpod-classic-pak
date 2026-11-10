@@ -2,11 +2,14 @@
  * Trimpod: runs TrimUI's stock hardware video player (tplayerslave) as a child.
  *
  * The player decodes to a display layer below the app window and takes commands
- * through a FIFO.  Two plugins from trimpod/video extend it: libpassthrua.so
- * (AC-3, found on LD_LIBRARY_PATH) and libdivx_shim.so (DivX, LD_PRELOAD).
+ * through a FIFO.  Plugins from trimpod/video extend it: libpassthrua.so (AC-3,
+ * found on LD_LIBRARY_PATH), and libdivx_shim.so (DivX) and the sound's route
+ * to Trimpod (video-audio.c), both preloaded.
  ****************************************************************************/
+#include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -19,6 +22,7 @@
 
 #include "config.h"
 #include "window-sdl.h"
+#include "video-audio.h"
 #include "video-target.h"
 
 #define PLAYER_BIN  "/usr/bin/tplayerslave"
@@ -37,6 +41,19 @@
 /* Wait up to a second for the player's FIFO. */
 #define OPEN_POLL_US 10000
 #define OPEN_POLLS   100
+
+/* The picture is display-engine channel 0, layer 0, and only the player's own
+ * exit takes it down.  Left up after any other death, it reads freed buffers and
+ * within seconds the engine stops producing frames until a reboot.  Switched off
+ * at once, the engine recovers.  An all-zero layer config is that layer, off. */
+#define DISP_DEV              "/dev/disp"
+#define DISP_LAYER_SET_CONFIG 0x47
+#define DISP_CONFIG_BYTES     512       /* more than struct disp_layer_config */
+#define DISP_LATCH_US         50000     /* a config applies at a vsync */
+
+/* SIGSTOP lands as each thread leaves the kernel. */
+#define FREEZE_POLL_US  5000
+#define FREEZE_POLLS    20
 
 extern char **environ;
 
@@ -121,7 +138,8 @@ static char **player_environment(void)
              "LD_LIBRARY_PATH=" PLUGIN_DIR ":/usr/trimui/lib:/usr/lib%s%s",
              old ? ":" : "", old ? old : "");
     envp[n++] = lib_path;
-    envp[n++] = "LD_PRELOAD=" PLUGIN_DIR "/libdivx_shim.so";
+    envp[n++] = "LD_PRELOAD=" PLUGIN_DIR "/libdivx_shim.so:"
+                PLUGIN_DIR "/libasound_module_pcm_trimpod.so";
     for (char **e = environ; *e && n < ENV_MAX - 1; e++)
         if (strncmp(*e, "LD_LIBRARY_PATH=", 16) && strncmp(*e, "LD_PRELOAD=", 11))
             envp[n++] = *e;
@@ -143,12 +161,17 @@ bool retrohh_video_start(const char *path, int start_ms)
     null_fd = open("/dev/null", O_WRONLY);      /* the player's log is very chatty */
     if (null_fd < 0)
         return false;
+    if (!video_audio_open())
+        fprintf(stderr, "video: no route for the player's sound\n");
     pid = fork();
     if (pid == 0)
         child_exec(PLAYER_BIN, argv, envp, null_fd, maxfd);
     close(null_fd);
     if (pid < 0)
+    {
+        video_audio_close();
         return false;
+    }
     player_pid = pid;
 
     /* No start-position option, but a seek queued before the file loads runs as
@@ -159,6 +182,38 @@ bool retrohh_video_start(const char *path, int start_ms)
     return true;
 }
 
+/* Stops every thread of the player, so none can put its layer back. */
+static void freeze_player(void)
+{
+    int st;
+
+    kill(player_pid, SIGSTOP);
+    for (int i = 0; i < FREEZE_POLLS; i++)
+    {
+        if (waitpid(player_pid, &st, WNOHANG | WUNTRACED) == player_pid)
+        {
+            if (!WIFSTOPPED(st))
+                player_pid = -1;        /* it exited */
+            return;
+        }
+        usleep(FREEZE_POLL_US);
+    }
+}
+
+static void hide_player_layer(void)
+{
+    static const unsigned char off[DISP_CONFIG_BYTES];
+    unsigned long args[4] = { 0, (unsigned long)off, 1, 0 };
+    int fd = open(DISP_DEV, O_RDWR);
+
+    if (fd < 0)
+        return;
+    if (ioctl(fd, DISP_LAYER_SET_CONFIG, args) < 0)
+        fprintf(stderr, "video: can't hide the player's layer: %s\n", strerror(errno));
+    close(fd);
+    usleep(DISP_LATCH_US);
+}
+
 bool retrohh_video_running(void)
 {
     if (player_pid < 0)
@@ -166,6 +221,7 @@ bool retrohh_video_running(void)
     if (waitpid(player_pid, NULL, WNOHANG) == player_pid)
     {
         player_pid = -1;
+        hide_player_layer();            /* however it ended */
         return false;
     }
     return true;
@@ -201,13 +257,20 @@ void retrohh_video_stop(void)
         for (int i = 0; i < STOP_POLLS && retrohh_video_running(); i++)
             usleep(STOP_POLL_US);
     }
-    if (player_pid >= 0)                /* it ignored the request */
+    if (player_pid > 0)                 /* it ignored the request */
     {
-        kill(player_pid, SIGKILL);
-        waitpid(player_pid, NULL, 0);
-        player_pid = -1;
+        fprintf(stderr, "video: the player ignored exit; killing it\n");
+        freeze_player();                /* hidden before its buffers go: no glitch */
+        hide_player_layer();
+        if (player_pid > 0)
+        {
+            kill(player_pid, SIGKILL);
+            waitpid(player_pid, NULL, 0);
+            player_pid = -1;
+        }
     }
     remove(STATUS_FILE);
+    video_audio_close();
 }
 
 static bool json_int(const char *json, const char *key, int *value)
@@ -257,7 +320,6 @@ void retrohh_video_set_aspect(const struct retrohh_video_info *info,
     long ratio_den = info->ratio_den ? info->ratio_den : info->height;
     int screen_w, screen_h;
     long w, h;
-    bool wider;
 
     if (aspect == RETROHH_VIDEO_STRETCH || ratio_num <= 0 || ratio_den <= 0)
     {
@@ -265,9 +327,9 @@ void retrohh_video_set_aspect(const struct retrohh_video_info *info,
         return;
     }
     SDL_GL_GetDrawableSize(sdlWindow, &screen_w, &screen_h);
-    wider = ratio_num * screen_h > ratio_den * screen_w;
-    /* Fit matches the limiting edge to the screen; Fill the other one. */
-    if (wider == (aspect == RETROHH_VIDEO_FIT))
+    /* The limiting edge matches the screen.  The window must stay on it: the
+     * display shows nothing of a layer that runs past an edge. */
+    if (ratio_num * screen_h > ratio_den * screen_w)
     {
         w = screen_w;
         h = w * ratio_den / ratio_num;

@@ -53,6 +53,12 @@
 #define DV_STEP_MDB   1160  /* milli-dB per hardware step */
 #define DV_MAX_STEPS  63
 
+/* The speaker baseline launch.sh sets for the session.  audiomon's switch to
+ * the speaker rewrites both with NextUI's volume, which at 0 silences it. */
+#define DAC_CTL_NAME  "DAC volume"
+#define DAC_LEVEL     160   /* NextUI's own ceiling */
+#define SPK_MUTE      "/sys/class/speaker/mute"
+
 /* NextUI publishes the active audio sink in its shared settings block, updated
  * by its audiomon daemon on connect/disconnect.  Byte 112 is SettingsV11 field
  * 29; the same arithmetic puts toggled_volume at byte 56, which is where
@@ -112,7 +118,9 @@ static pthread_mutex_t alsa_cfg_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static snd_ctl_t *dv_ctl = NULL;
 static snd_ctl_elem_value_t *dv_val = NULL;
+static snd_ctl_elem_value_t *dac_val = NULL;
 static bool dv_open_tried = false;
+static bool overwritten;        /* NextUI set its volume since ours */
 
 /* One open attempt; on failure software carries the whole volume range. */
 static void hw_dv_open(void)
@@ -127,8 +135,11 @@ static void hw_dv_open(void)
         return;
     }
 
-    if (snd_ctl_elem_value_malloc(&dv_val) < 0)
+    if (snd_ctl_elem_value_malloc(&dv_val) < 0 ||
+        snd_ctl_elem_value_malloc(&dac_val) < 0)
     {
+        snd_ctl_elem_value_free(dv_val);
+        dv_val = NULL;
         snd_ctl_close(dv_ctl);
         dv_ctl = NULL;
         return;
@@ -136,6 +147,23 @@ static void hw_dv_open(void)
 
     snd_ctl_elem_value_set_interface(dv_val, SND_CTL_ELEM_IFACE_MIXER);
     snd_ctl_elem_value_set_name(dv_val, DV_CTL_NAME);
+    snd_ctl_elem_value_set_interface(dac_val, SND_CTL_ELEM_IFACE_MIXER);
+    snd_ctl_elem_value_set_name(dac_val, DAC_CTL_NAME);
+    snd_ctl_elem_value_set_integer(dac_val, 0, DAC_LEVEL);
+    snd_ctl_elem_value_set_integer(dac_val, 1, DAC_LEVEL);
+}
+
+static void speaker_restore_baseline(void)
+{
+    FILE *f = fopen(SPK_MUTE, "w");
+
+    if (dv_ctl)
+        snd_ctl_elem_write(dv_ctl, dac_val);
+    if (f)
+    {
+        fputs("0", f);
+        fclose(f);
+    }
 }
 
 /* ---- Bluetooth: BlueALSA's A2DP volume, out of process ------------------
@@ -391,6 +419,13 @@ void trimpod_alsa_forget_sink(void)
     pthread_mutex_unlock(&alsa_cfg_lock);
 }
 
+void trimpod_alsa_volume_overwritten(void)
+{
+    pthread_mutex_lock(&alsa_cfg_lock);
+    overwritten = true;
+    pthread_mutex_unlock(&alsa_cfg_lock);
+}
+
 /* Q16 amplitude factor for an attenuation in milli-dB (unity = 1<<16). */
 static int32_t mdb_to_factor(int att_mdb)
 {
@@ -429,11 +464,17 @@ void audiohw_set_volume(int vol_l, int vol_r)
      * tree these handles came from at any moment. */
     pthread_mutex_lock(&alsa_cfg_lock);
 
-    if (sink != last_sink)
+    if (sink != last_sink || overwritten)
     {
         last_sink = sink;
+        overwritten = false;
         bt_forget();                    /* re-probe once for the new route */
         usb_forget();
+        if (sink == SINK_SPEAKER)
+        {
+            hw_dv_open();
+            speaker_restore_baseline();
+        }
     }
 
     /* attenuations in milli-dB, INT_MAX = mute */

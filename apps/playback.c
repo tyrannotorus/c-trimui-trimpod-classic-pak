@@ -1605,9 +1605,14 @@ static int audio_load_track(void)
         }
         logf("Open failed %s", path);
 
-        /* only skip if failed track has a successor in playlist */
+        /* only skip if failed track has a successor in playlist; a missing
+         * last entry ends it, as if it weren't there (Trimpod: otherwise its
+         * failed bufopen below reads as a full buffer and playback never ends) */
         if (!playlist_peek(playlist_peek_offset + 1, NULL, 0))
+        {
+            path = NULL;
             break;
+        }
 
         /* Skip invalid entry from playlist */
         playlist_skip_entry(NULL, playlist_peek_offset);

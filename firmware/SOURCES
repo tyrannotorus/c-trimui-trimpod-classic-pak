@@ -253,6 +253,7 @@ target/hosted/sysfs.c
 target/hosted/sdl/retro-handheld/backlight-target.c
 target/hosted/sdl/retro-handheld/power-target.c
 target/hosted/sdl/retro-handheld/video-target.c
+target/hosted/sdl/retro-handheld/video-audio.c
 target/hosted/sdl/retro-handheld/button-target.c
 target/hosted/sdl/retro-handheld/powermgmt-target.c
 

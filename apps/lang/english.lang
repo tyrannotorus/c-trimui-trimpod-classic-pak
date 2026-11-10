@@ -17166,20 +17166,6 @@
   </voice>
 </phrase>
 <phrase>
-  id: LANG_REPLAY_FINISHED_PLAYLIST
-  desc: Resume playback of finished playlist
-  user: core
-  <source>
-    *: "Playlist finished. Play again?"
-  </source>
-  <dest>
-    *: "Playlist finished. Play again?"
-  </dest>
-  <voice>
-    *: "Playlist finished. Play again?"
-  </voice>
-</phrase>
-<phrase>
   id: LANG_SORT_PLAYLISTS
   desc: playlists sorting setting
   user: core
@@ -17894,20 +17880,6 @@
   </dest>
   <voice>
     *: "Fit"
-  </voice>
-</phrase>
-<phrase>
-  id: LANG_TRIMPOD_ASPECT_FILL
-  desc: Trimpod video aspect ratio: fills the screen, edges cropped
-  user: core
-  <source>
-    *: "Fill"
-  </source>
-  <dest>
-    *: "Fill"
-  </dest>
-  <voice>
-    *: "Fill"
   </voice>
 </phrase>
 <phrase>
