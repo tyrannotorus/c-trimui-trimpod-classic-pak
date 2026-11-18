@@ -4,10 +4,12 @@ Trimpod Classic is an iPod classic-inspired, offline music player built for the 
 <img width="800" height="800" alt="eXF4hgWWRl-800" src="https://github.com/user-attachments/assets/52b97a3b-38a7-4d4b-8c72-cb310936c3da" />
 
 # Features
-- Classic iPod styling with selectable colour themes
+- Classic iPod styling with colour themes
 - Plays offline music
 - Integrated milkdrop visualizations
 - Dynamic playlist and track queuing support
+- Side switch lock for pocket play
+- Auto display off
 - USBC headphone and bluetooth audio support
 - Battery charge protection setting
 - Auto usb-mounting when plugged in
