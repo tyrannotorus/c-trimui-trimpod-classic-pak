@@ -13,7 +13,7 @@ Trimpod Classic is an iPod classic-inspired, offline music player built for the 
 - Auto usb-mounting when plugged in
 - Video support
 
-## Supported Devices
+# Supported Devices
 ## Trimui Brick/Hammer
 1. Install via the [NextUI's](https://github.com/LoveRetro/NextUI) [Pak Store](https://github.com/LoveRetro/nextui-pak-store).
 
