@@ -11,6 +11,7 @@ Trimpod Classic is an iPod classic-inspired, offline music player built for the 
 - USBC headphone and bluetooth audio support
 - Battery charge protection setting
 - Auto usb-mounting when plugged in
+- Audiobook chapter/resume support
 - Video support
 
 # Supported Devices
