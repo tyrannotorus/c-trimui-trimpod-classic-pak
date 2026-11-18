@@ -1,44 +1,29 @@
 # Trimpod Classic For TrimUI Brick
-
-<img width="800" height="800" alt="eXF4hgWWRl-800" src="https://github.com/user-attachments/assets/52b97a3b-38a7-4d4b-8c72-cb310936c3da" />
-
-## Description
-
 Trimpod Classic is an iPod classic-inspired, offline music player built for the TrimUI Brick.
 It builds upon a heavily-modified Rockbox base and includes 100 Winamp-inspired milkdrop visualizations.
 
-## User Disclaimer
+<img width="800" height="800" alt="eXF4hgWWRl-800" src="https://github.com/user-attachments/assets/52b97a3b-38a7-4d4b-8c72-cb310936c3da" />
 
-Trimpod Classic is shared free with the TrimUI community and provided **as-is, without any
-warranty**. It is an independent personal-use app; use it at your own risk. The author accepts no
-liability for any damage to your device when it melts from awesomeness.
+# Features
+- Classic iPod styling
+- Plays offline music
+- Integrated milkdrop visualizations
+- Dynamic playlist and track queuing support
+- USBC headphone and bluetooth audio support
+- Battery charge protection setting
+- Auto usb-mounting when plugged in
+- Video support
 
-## Dev Disclaimer
+## Supported Devices
+## Trimui Brick/Hammer
+1. Install via the [NextUI's](https://github.com/LoveRetro/NextUI) [Pak Store](https://github.com/LoveRetro/nextui-pak-store).
 
-While I am a 10+ year industry veteran, note this project has been human-directed as far as architecture,
-but 100% slop-coded. I've done my best to ensure professional standards at a high level, but make no
-guarantee of "thoughtfully-engineered code" at the ground level. Thus is the warning, so beware when
-forking. Here be dragons.
-
-## Supported Platforms
-
-- **tg5040** — TrimUI Brick
-- I have no other devices to test with. Send me one! :)
-
-## Install via Pak Store
-1. Trimpod is available via download through [NextUI's](https://github.com/LoveRetro/NextUI) [Pak Store](https://github.com/LoveRetro/nextui-pak-store).
-
-## Install manually
-
-1. Download `Trimpod.pak.zip` from the [latest release](https://github.com/tyrannotorus/c-trimui-trimpod-classic-pak/releases).
+1. Or Download `Trimpod.pak.zip` from the [latest release](https://github.com/tyrannotorus/c-trimui-trimpod-classic-pak/releases).
 2. Copy it to `/mnt/SDCARD/Tools/tg5040/` (mount the SD card or `adb push`).
 3. Extract it so the `Trimpod Classic.pak` folder lands directly in `/mnt/SDCARD/Tools/tg5040/`, then
    delete the zip.
 4. On device, open **Tools → Trimpod Classic**.
 5. Put music under `/mnt/SDCARD/Music` (or add folders from Settings), then pick a track.
-
-> **Note:** `launch.sh` must sit directly inside the `.pak` folder. Some unzip tools double-wrap the
-> archive — if you see `Trimpod Classic.pak/Trimpod Classic.pak/`, move the inner folder up one level.
 
 ## Build
 
