@@ -17,7 +17,7 @@ Trimpod Classic is an iPod classic-inspired, offline music player built for the 
 ## Trimui Brick/Hammer (easy install)
 1. Install via the [NextUI's](https://github.com/LoveRetro/NextUI) [Pak Store](https://github.com/LoveRetro/nextui-pak-store).
 ## Trimui Brick/Hammer (manual install)
-1. Or Download `Trimpod.pak.zip` from the [latest release](https://github.com/tyrannotorus/c-trimui-trimpod-classic-pak/releases).
+1. Download `Trimpod.pak.zip` from the [latest release](https://github.com/tyrannotorus/c-trimui-trimpod-classic-pak/releases).
 2. Copy it to `/mnt/SDCARD/Tools/tg5040/` (mount the SD card or `adb push`).
 3. Extract it so the `Trimpod Classic.pak` folder lands directly in `/mnt/SDCARD/Tools/tg5040/`, then
    delete the zip.
