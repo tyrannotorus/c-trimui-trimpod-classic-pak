@@ -268,6 +268,21 @@ static bool parse_mdb(const char *s, int *out)
 #define USB_DB_TAG "dBminmax-min="
 #define USB_DBMAX_TAG ",max="
 
+/* A headset's mic sidetone is also a "<source> Playback Volume", and amixer
+ * lists by alsa-lib's name weight, not hardware order: "Mic" sorts ahead of
+ * "Headset" and "Speaker".  Driving it leaves the music at full level.  "Mic"
+ * is the kernel's name for a mic source, "Sidetone" its quirk-map name. */
+static bool usb_is_sidetone(const char *name)
+{
+    static const char *const prefixes[] = { "Mic", "Sidetone", NULL };
+    const char *const *p;
+
+    for (p = prefixes; *p; p++)
+        if (strncmp(name, *p, strlen(*p)) == 0)
+            return true;
+    return false;
+}
+
 /* One element spans several lines of `amixer contents`, and the name comes
  * first, so a candidate is held until its type and dB lines confirm it:
  *
@@ -306,12 +321,13 @@ static void usb_find_control(void)
         {
             typed = false;
             cand[0] = '\0';
-            /* NextUI's rule, plus two guards it lacks: its match also hits
-             * "PCM Capture Volume", an input, and the name is re-emitted
-             * inside single quotes. */
+            /* NextUI's rule, plus guards it lacks: its match also hits
+             * "PCM Capture Volume", an input, and a mic sidetone, and the
+             * name is re-emitted inside single quotes. */
             if ((strstr(name, "Playback") || strstr(name, "PCM")) &&
                 (strstr(name, "Volume") || strstr(name, "volume")) &&
-                !strstr(name, "Capture") && !strchr(name, '\''))
+                !strstr(name, "Capture") && !strchr(name, '\'') &&
+                !usb_is_sidetone(name))
                 snprintf(cand, sizeof cand, "%s", name);
             continue;
         }
